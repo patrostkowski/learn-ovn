@@ -6,7 +6,16 @@ _What the `ovs-vsctl show` tree actually means. Three different rows, three diff
 
 The OVS database (`Open_vSwitch`) contains bridges. Each bridge contains ports. Each port contains one or more interfaces.
 
-Open_vSwitch (the OVS database / daemon) └── Bridge br-int # an L2 switch (one broadcast domain) ├── Port br-int │ └── Interface br-int # type internal (the bridge's own port) ├── Port p1 │ └── Interface p1 # a real device on the bridge └── Port who-if └── Interface who-if
+```mermaid
+flowchart TD
+    db[("Open_vSwitch<br/>the OVS database / daemon")] --> br["Bridge br-int<br/>an L2 switch, one broadcast domain"]
+    br --> p0["Port br-int"]
+    br --> p1["Port p1"]
+    br --> p2["Port who-if"]
+    p0 --> i0["Interface br-int<br/>type internal, the bridge's own port"]
+    p1 --> i1["Interface p1<br/>a real device on the bridge"]
+    p2 --> i2["Interface who-if"]
+```
 
 > In the common 1-interface-per-port case, the Port and its Interface carry the **same name** - which is why `ovs-vsctl show` looks like it repeats itself. They are still two separate rows.
 

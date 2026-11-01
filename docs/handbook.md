@@ -94,6 +94,25 @@ ovs-vsctl --columns=name,ofport,external_ids list Interface
 
 ### Lifecycle of a VM Network Port
 
+```mermaid
+sequenceDiagram
+    participant Nova
+    participant Neutron as Neutron + ML2/OVN
+    participant NB as OVN NB
+    participant northd as ovn-northd
+    participant SB as OVN SB
+    participant OVS as Local OVS
+    participant ctl as ovn-controller
+    Nova->>Neutron: create or reuse port
+    Neutron->>NB: Logical_Switch_Port named by port UUID
+    northd->>SB: Port_Binding + logical flows
+    Nova->>OVS: VM interface with iface-id = port UUID
+    OVS-->>ctl: interface appears
+    ctl->>SB: claim Port_Binding for this chassis
+    ctl->>OVS: program OpenFlow on br-int
+    SB-->>Neutron: port up, mark ACTIVE
+```
+
 1. Nova asks Neutron for a port or uses an existing port. Neutron allocates MAC/IP/security-group state.
 2. ML2/OVN creates a NB `Logical_Switch_Port` named as the Neutron port UUID, with addresses, port security, DHCP options, security group memberships, and metadata in `external_ids`.
 3. `ovn-northd` creates or updates the SB `Port_Binding` and logical flows for the datapath.

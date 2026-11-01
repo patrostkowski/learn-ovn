@@ -6,11 +6,11 @@ _Your next OVN skill: change Northbound intent and watch the change move into lo
 
 So far you have mostly observed OVN. Now you will change it. An ACL is Northbound intent: *traffic matching this expression should get this verdict*.
 
-```text
-acl-add in NB DB
-  -> ovn-northd compiles ACL logical flows in SB DB
-  -> ovn-trace stops showing final output for the dropped packet
-  -> ovn-controller can install changed OpenFlow locally
+```mermaid
+flowchart TD
+    acl["ovn-nbctl acl-add<br/>NB DB"] --> northd["ovn-northd compiles<br/>ACL logical flows in SB DB"]
+    northd --> trace["ovn-trace: no final output<br/>for the dropped packet"]
+    northd --> ctl["ovn-controller installs<br/>changed OpenFlow locally"]
 ```
 
 The important move is not memorizing every ACL table. It is seeing one small policy change ripple across the surfaces from Lesson 1.

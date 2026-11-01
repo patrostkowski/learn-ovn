@@ -6,7 +6,21 @@ _Compare two real OVN integrations: Kube-OVN as a Kubernetes-native controller s
 
 Both systems are control planes above the same OVN databases. They differ in the APIs they expose and the reconciliation code they run, but once they write Northbound rows, the lower OVN path is shared.
 
-User-facing API -> integration controller -> OVN Northbound -> ovn-northd -> OVN Southbound -> ovn-controller -> OVS
+```mermaid
+flowchart LR
+    subgraph integ["Integration layer: differs"]
+        k8s["Kubernetes API<br/>Kube-OVN CRDs"] --> kctl["kube-ovn-controller"]
+        os["OpenStack API<br/>Neutron"] --> ml2["ML2/OVN driver"]
+    end
+    subgraph core["Shared OVN core"]
+        nb[("OVN Northbound")] --> northd["ovn-northd"]
+        northd --> sb[("OVN Southbound")]
+        sb --> ctl["ovn-controller"]
+        ctl --> ovs["OVS"]
+    end
+    kctl --> nb
+    ml2 --> nb
+```
 
 The learning trick is to separate *product abstraction* from *OVN primitive*. Kube-OVN and OpenStack often create the same OVN row types, but for different reasons and with different ownership rules.
 

@@ -22,6 +22,22 @@ OVS Interface.external_ids:iface-id   ==   SB Port_Binding.logical_port
 - **Local OVS speaks**: An interface appears with `external_ids:iface-id=who-port`. This is set on the node, by the node.
 - **Controller answers**: `ovn-controller` matches by name, writes `chassis=<itself>`, programs OpenFlow on `br-int`.
 
+```mermaid
+sequenceDiagram
+    participant northd as ovn-northd
+    participant SB as SB DB
+    participant node as Node agent (CNI / os-vif / you)
+    participant OVS as Local OVSDB
+    participant ctl as ovn-controller
+    northd->>SB: create Port_Binding who-port, chassis=[]
+    Note over SB: an empty slot, nothing is pushed down
+    node->>OVS: add Interface, external_ids:iface-id=who-port
+    OVS-->>ctl: new interface with iface-id
+    ctl->>SB: look up Port_Binding by name who-port
+    ctl->>SB: write chassis = this node
+    ctl->>OVS: program OpenFlow on br-int
+```
+
 > Direction: OVS → controller → SB. Not SB → OVS.
 
 ## Who Writes What

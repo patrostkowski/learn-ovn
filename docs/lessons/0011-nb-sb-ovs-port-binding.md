@@ -6,12 +6,12 @@ _Create one logical port by hand, watch `ovn-northd` compile it into a Southboun
 
 Creating a port in the Northbound DB does **not** automatically mean there is a Linux or OVS interface carrying packets. Northbound creation says “this logical attachment should exist.” Southbound `Port_Binding` says “OVN has compiled a runtime binding record for that logical attachment.” Local OVS only becomes involved when an OVS `Interface` claims the logical port name with `external_ids:iface-id`.
 
-- **1. NB intent**: `Logical_Switch_Port bind-port`  
-Created by `ovn-nbctl lsp-add`.
-- **2. SB runtime row**: `Port_Binding logical_port=bind-port`  
-Created by `ovn-northd`.
-- **3. Local OVS claim**: `Interface bind-if external_ids:iface-id=bind-port`  
-Seen by `ovn-controller`.
+```mermaid
+flowchart LR
+    you["you"] -- "ovn-nbctl lsp-add" --> lsp["1. NB intent<br/>Logical_Switch_Port bind-port"]
+    lsp -- "ovn-northd" --> pb["2. SB runtime row<br/>Port_Binding logical_port=bind-port"]
+    iface["3. Local OVS claim<br/>Interface bind-if<br/>external_ids:iface-id=bind-port"] -- "seen by ovn-controller" --> pb
+```
 
 > The join key is the exact string `bind-port`. In OpenStack, this is normally the Neutron port UUID.
 

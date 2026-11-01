@@ -14,6 +14,15 @@ ovn-nbctl --wait=sb acl-del sw0 from-lport 1001 \
 
 `--may-exist` makes the add safe to repeat. `--wait=sb` waits until `ovn-northd` has updated the Southbound DB.
 
+```mermaid
+flowchart LR
+    add["acl-add"] --> nb["1. NB intent<br/>ovn-nbctl acl-list"]
+    nb --> sb["2. SB compile<br/>ovn-sbctl lflow-list"]
+    sb --> tr["3. Trace result<br/>ovn-trace"]
+    tr --> del["acl-del"]
+    del -- "repeat" --> add
+```
+
 ## 1. NB Intent
 
 `ovn-nbctl acl-list sw0`

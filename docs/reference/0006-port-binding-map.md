@@ -10,6 +10,15 @@ logical port name == Port_Binding.logical_port == Interface.external_ids:iface-i
 
 In the sandbox, `sw0-port1` is the logical name and `p1` is the local OVS interface that claims it.
 
+```mermaid
+flowchart LR
+    nb["1. Northbound<br/>Logical_Switch_Port sw0-port1<br/>ovn-nbctl lsp-list sw0"]
+    sb["2. Southbound<br/>Port_Binding logical_port=sw0-port1<br/>ovn-sbctl list port_binding"]
+    ovs["3. Local OVS<br/>Interface p1, iface-id=sw0-port1<br/>ovs-vsctl list Interface p1"]
+    nb -- "same name" --> sb
+    ovs -- "same name" --> sb
+```
+
 ## 1. Northbound
 
 `ovn-nbctl lsp-list sw0`

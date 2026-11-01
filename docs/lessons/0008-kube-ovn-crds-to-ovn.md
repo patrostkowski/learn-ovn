@@ -6,7 +6,13 @@ _Learn how Kube-OVN turns Kubernetes CRDs such as VPC, Subnet, ACL, EIP, SNAT, D
 
 Kube-OVN is a Kubernetes controller layer over OVN. A user creates a Kubernetes object. Kube-OVN reconciles it. The controller writes OVN Northbound rows. Then the same OVN path you already learned takes over: `ovn-northd` compiles NB state to SB logical flows, and `ovn-controller` programs local OVS.
 
-Kube-OVN CRD -> controller reconcile -> OVN NB object -> SB logical flows -> OVS OpenFlow
+```mermaid
+flowchart LR
+    crd["Kube-OVN CRD"] --> rec["kube-ovn-controller<br/>reconcile"]
+    rec --> nb[("OVN NB object")]
+    nb -- "ovn-northd" --> sb[("SB logical flows")]
+    sb -- "ovn-controller" --> of["OVS OpenFlow"]
+```
 
 This lesson is deliberately not about running Kubernetes. It uses the OVN sandbox to reproduce the OVN objects that Kube-OVN would have created.
 

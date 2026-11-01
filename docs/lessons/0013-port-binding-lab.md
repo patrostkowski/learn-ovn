@@ -56,6 +56,22 @@ ovn-nbctl show
 2. Each switch gets a `router`-type port whose address is the router port's MAC and whose `router-port` option names the LRP. That option is the L2↔L3 splice.
 3. `lab-host-a`/`lab-host-b` are the VIF-style ports - the ones you will bind to OVS by hand.
 
+The topology you just built:
+
+```mermaid
+flowchart LR
+    a["lab-host-a<br/>10.50.10.10"] --- left["switch lab-left"]
+    left --- lrtr["lab-left-rtr<br/>type=router"]
+    lrtr -. "router-port" .- l["lab-l<br/>10.50.10.1/24"]
+    subgraph rtr["router lab-rtr"]
+        l
+        r["lab-r<br/>10.50.20.1/24"]
+    end
+    r -. "router-port" .- rrtr["lab-right-rtr<br/>type=router"]
+    rrtr --- right["switch lab-right"]
+    right --- b["lab-host-b<br/>10.50.20.10"]
+```
+
 ## Step 2: Nothing Is Bound Yet
 
 The host ports exist in NB and SB, but SB has no chassis for them.

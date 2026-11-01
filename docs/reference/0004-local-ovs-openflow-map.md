@@ -22,13 +22,13 @@ Installed in Open vSwitch. These use bridge tables, registers, metadata, and Ope
 
 ## Translation Chain
 
-```text
-Northbound intent
-  -> ovn-northd
-  -> Southbound logical flows
-  -> ovn-controller
-  -> OpenFlow on br-int
-  -> ovs-vswitchd packet processing
+```mermaid
+flowchart TD
+    nb[("Northbound intent")] --> northd["ovn-northd"]
+    northd --> sb[("Southbound logical flows")]
+    sb --> ctl["ovn-controller"]
+    ctl --> of["OpenFlow on br-int"]
+    of --> vsd["ovs-vswitchd<br/>packet processing"]
 ```
 
 ## What To Look For

@@ -6,12 +6,14 @@ _A compact guide for reading directly connected routes in the OVN sandbox router
 
 A logical router port is both an interface and a source of directly connected routes.
 
-```text
-lrp0: mac 00:00:00:00:ff:01, network 192.168.0.1/24
-  -> route destinations 192.168.0.x out lrp0
-
-lrp1: mac 00:00:00:00:ff:02, network 11.0.0.1/24
-  -> route destinations 11.0.0.x out lrp1
+```mermaid
+flowchart LR
+    sw0["switch sw0<br/>192.168.0.x"] --- lrp0
+    subgraph lr0["router lr0"]
+        lrp0["lrp0<br/>00:00:00:00:ff:01<br/>192.168.0.1/24"]
+        lrp1["lrp1<br/>00:00:00:00:ff:02<br/>11.0.0.1/24"]
+    end
+    lrp1 --- sw1["switch sw1<br/>11.0.0.x"]
 ```
 
 ## Commands

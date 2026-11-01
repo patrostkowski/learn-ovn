@@ -2,6 +2,16 @@
 
 _A compact map for deciding which command to use in the sandbox._
 
+```mermaid
+flowchart TD
+    nb[("Northbound DB<br/>intent")] -- "read by" --> northd["ovn-northd<br/>compiler"]
+    northd -- "writes" --> sb[("Southbound DB<br/>distribution")]
+    sb -- "read by" --> ctl["ovn-controller<br/>local agent"]
+    ctl -- "programs" --> ovs["Open vSwitch<br/>br-int"]
+    c1(["ovn-nbctl show"]) -.-> nb
+    c2(["ovn-sbctl show<br/>ovn-sbctl lflow-list"]) -.-> sb
+    c3(["ovs-vsctl show<br/>ovs-ofctl dump-flows br-int"]) -.-> ovs
+```
 ## Northbound DB
 
 The intent layer. It stores logical switches, logical routers, ACLs, and other desired logical network configuration.

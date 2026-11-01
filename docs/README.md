@@ -21,6 +21,8 @@ If you forget, `sandbox.sh` fetches `ovn/` for you. It also fetches the nested `
 ./sandbox.sh cleanup  # stop sandbox daemons and remove ovn/tutorial/sandbox
 ```
 
+`./sandbox.sh` opens a new shell in `ovn/tutorial` with the OVN/OVS tools on `PATH`. Run every lesson command in that shell, not your normal one, and type `exit` to leave it.
+
 ## Lessons
 
 | # | Lesson | Goal |

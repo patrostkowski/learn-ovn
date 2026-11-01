@@ -6,11 +6,18 @@ _Once `ovn-northd` compiles your NB intent it lands in the SB `Logical_Flow` tab
 
 A SB `Logical_Flow` row is one rule in one pipeline table of one logical datapath. It is the compiled form of NB intent, not the intent itself. You never write these rows by hand; `ovn-northd` generates them, and `ovn-controller` translates the relevant ones into OpenFlow on `br-int`.
 
-- **NB**: Logical switch/router, ports, ACLs, NAT (intent)
-- **northd**: compiles
-- **SB**: `Logical_Flow` rows per datapath (the pipeline)
-- **ovn-controller**: translates local flows
-- **OpenFlow**: on `br-int` (the datapath)
+```mermaid
+flowchart LR
+    nb[("NB<br/>switches, routers, ports,<br/>ACLs, NAT (intent)")] -- "ovn-northd compiles" --> sb[("SB<br/>Logical_Flow rows<br/>per datapath")]
+    sb -- "ovn-controller translates local flows" --> of["OpenFlow<br/>on br-int"]
+```
+
+```mermaid
+flowchart LR
+    t0["table 0"] -- "highest-priority match<br/>runs actions, next" --> t1["table 1"]
+    t1 -- "next" --> dots["..."]
+    dots -- "output" --> out["egress pipeline<br/>or out a port"]
+```
 
 A single row is: **{datapath, pipeline, table, priority, match, actions}**. Evaluation: enter at table 0, find true matches, the **highest priority** wins, run its actions; `next` advances to the next table, `output` delivers the packet.
 

@@ -8,6 +8,22 @@ OVN configuration flows from north to south. The local [`ovn-architecture.7`](..
 
 For now, compress that to three surfaces:
 
+```mermaid
+flowchart LR
+    subgraph s1["1. Intent: ovn-nbctl"]
+        nb[("Northbound DB")]
+    end
+    subgraph s2["2. Compiled OVN: ovn-sbctl"]
+        sb[("Southbound DB")]
+    end
+    subgraph s3["3. Local OVS: ovs-vsctl, ovs-ofctl"]
+        ovs["Open vSwitch<br/>br-int"]
+    end
+    cms["CMS / you"] --> nb
+    nb -- "ovn-northd" --> sb
+    sb -- "ovn-controller" --> ovs
+```
+
 ### 1. Intent
 
 `ovn-nbctl` reads and writes the logical network you asked OVN to create.
@@ -22,7 +38,15 @@ For now, compress that to three surfaces:
 
 ## Sandbox Exercise
 
-In your running sandbox shell, run these commands. Do not worry if the output is dense. Your job is only to label the surface.
+First start the sandbox from the repo root. It builds OVS and OVN if needed, then opens a **new shell** inside `ovn/tutorial` with `ovn-nbctl`, `ovn-sbctl`, `ovs-vsctl` and friends on `PATH`. Your normal shell does not have these tools.
+
+```sh
+./sandbox.sh
+```
+
+Every lesson command runs inside that shell. Type `exit` to leave it, and run `./sandbox.sh cleanup` to stop its daemons and wipe its state.
+
+In the sandbox shell, run these commands. Do not worry if the output is dense. Your job is only to label the surface.
 
 ```sh
 ./ovn-setup.sh

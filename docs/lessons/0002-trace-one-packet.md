@@ -8,6 +8,16 @@ _Your next OVN skill: describe what OVN would do to a packet before you look at 
 
 In the tutorial topology, one packet starts on `sw0-port1`, enters the logical router through `lrp0`, exits through `lrp1`, and lands on `sw1-port1`.
 
+```mermaid
+flowchart LR
+    p1["sw0-port1<br/>192.168.0.2"] --> sw0["switch sw0"]
+    sw0 --> lrp0["lrp0<br/>192.168.0.1"]
+    subgraph lr0["router lr0"]
+        lrp0 -- "route lookup<br/>ip.ttl--" --> lrp1["lrp1<br/>11.0.0.1"]
+    end
+    lrp1 --> sw1["switch sw1"]
+    sw1 --> p3["sw1-port1<br/>11.0.0.2"]
+```
 ### Start
 
 `sw0-port1`  

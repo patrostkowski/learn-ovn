@@ -6,11 +6,11 @@ _Your next OVN skill: connect a logical port name to the local OVS interface tha
 
 A logical switch port is OVN's name for an attachment point. A local OVS interface realizes that attachment point when its `external_ids:iface-id` equals the logical port name.
 
-```text
-NB Logical_Switch_Port: sw0-port1
-  -> SB Port_Binding: logical_port=sw0-port1
-  -> local OVS Interface p1: external_ids:iface-id=sw0-port1
-  -> ovn-controller binds the Port_Binding to this chassis
+```mermaid
+flowchart LR
+    lsp["NB Logical_Switch_Port<br/>name = sw0-port1"] -- "ovn-northd" --> pb["SB Port_Binding<br/>logical_port = sw0-port1"]
+    iface["local OVS Interface p1<br/>external_ids:iface-id = sw0-port1"] -- "seen by" --> ctl["ovn-controller"]
+    ctl -- "writes chassis = this node" --> pb
 ```
 
 The join key is the name `sw0-port1`. Follow that string across the three surfaces.

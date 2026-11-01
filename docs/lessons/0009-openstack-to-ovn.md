@@ -6,7 +6,13 @@ _Learn how Neutron's ML2/OVN driver turns OpenStack networks, subnets, ports, ro
 
 OpenStack users create Neutron resources through the OpenStack API. With the OVN mechanism driver enabled, Neutron writes OVN Northbound rows. After that, the path is the same OVN pipeline you already know: `ovn-northd` compiles Northbound state into Southbound logical flows, and `ovn-controller` programs local OVS.
 
-OpenStack API -> Neutron ML2/OVN -> OVN NB object -> SB logical flows -> OVS OpenFlow
+```mermaid
+flowchart LR
+    api["OpenStack API"] --> ml2["Neutron<br/>ML2/OVN driver"]
+    ml2 --> nb[("OVN NB object")]
+    nb -- "ovn-northd" --> sb[("SB logical flows")]
+    sb -- "ovn-controller" --> of["OVS OpenFlow"]
+```
 
 This lesson does not run OpenStack. It recreates the OVN objects Neutron would write, using sandbox commands.
 

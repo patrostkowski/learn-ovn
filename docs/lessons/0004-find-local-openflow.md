@@ -6,8 +6,10 @@ _Your next OVN skill: separate logical flows from the OpenFlow installed into lo
 
 Lesson 3 showed that `ovn-northd` writes Southbound logical flows. The next daemon in the chain is `ovn-controller`. It runs on the chassis and translates relevant Southbound data into OpenFlow on the integration bridge, `br-int`.
 
-```text
-SB logical flows -> ovn-controller -> OpenFlow on br-int
+```mermaid
+flowchart LR
+    sb[("SB logical flows<br/>OVN vocabulary")] --> ctl["ovn-controller"]
+    ctl --> of["OpenFlow on br-int<br/>OVS vocabulary"]
 ```
 
 This lesson is not about mastering OpenFlow syntax. It is about recognizing when you have crossed from OVN's logical vocabulary into OVS's local forwarding vocabulary.

@@ -12,10 +12,14 @@ lr0 has two router ports:
 lrp0: 192.168.0.1/24, mac 00:00:00:00:ff:01
 lrp1: 11.0.0.1/24,    mac 00:00:00:00:ff:02
 
-Packet destination 11.0.0.2
-  -> matches 11.0.0.0/24
-  -> route out lrp1
-  -> use lrp1 MAC as the new Ethernet source
+```
+
+```mermaid
+flowchart LR
+    pkt["packet to 11.0.0.2"] --> lookup{"lr0 route lookup"}
+    lookup -. "192.168.0.0/24: no match" .-> lrp0["lrp0<br/>192.168.0.1/24"]
+    lookup -- "11.0.0.0/24: match" --> lrp1["lrp1<br/>11.0.0.1/24"]
+    lrp1 --> rewrite["eth.src = 00:00:00:00:ff:02<br/>(lrp1 MAC)"]
 ```
 
 ## Sandbox Exercise
