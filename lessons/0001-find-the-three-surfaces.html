@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Lesson 1: Find The Three Surfaces</title>
+  <link rel="stylesheet" href="../assets/course.css">
+</head>
+<body>
+<main>
+  <span class="tag">Lesson 1</span>
+  <h1>Find The Three Surfaces</h1>
+  <p class="subtitle">Your first OVN skill: know whether a command is looking at intent, compiled OVN state, or local Open vSwitch state.</p>
+
+  <section class="card">
+    <h2>The Model</h2>
+    <p>OVN configuration flows from north to south. The local <a href="../ovn/ovn-architecture.7"><code>ovn-architecture.7</code></a> manual describes this as: CMS intent enters the <strong>OVN Northbound DB</strong>, <code>ovn-northd</code> translates it into the <strong>OVN Southbound DB</strong>, and <code>ovn-controller</code> programs local Open vSwitch.</p>
+    <p>For now, compress that to three surfaces:</p>
+    <div class="grid">
+      <div class="card"><h3>1. Intent</h3><p><code>ovn-nbctl</code> reads and writes the logical network you asked OVN to create.</p></div>
+      <div class="card"><h3>2. Compiled OVN</h3><p><code>ovn-sbctl</code> reads what <code>ovn-northd</code> produced for controllers.</p></div>
+      <div class="card"><h3>3. Local OVS</h3><p><code>ovs-vsctl</code> and <code>ovs-ofctl</code> inspect what exists on the local virtual switch.</p></div>
+    </div>
+  </section>
+
+  <section class="checkpoint">
+    <h2>Sandbox Exercise</h2>
+    <p>In your running sandbox shell, run these commands. Do not worry if the output is dense. Your job is only to label the surface.</p>
+    <pre><code>./ovn-setup.sh
+ovn-nbctl show
+ovn-sbctl show
+ovs-vsctl show</code></pre>
+    <p>Expected observation: <code>ovn-nbctl show</code> should mention logical switches and a logical router from the tutorial topology. <code>ovn-sbctl show</code> should show chassis/Southbound information. <code>ovs-vsctl show</code> should show local OVS bridge/configuration state.</p>
+  </section>
+
+  <section class="quiz" data-quiz>
+    <h2>Retrieval Check</h2>
+    <p>Answer from memory before peeking back at the model.</p>
+
+    <div data-question data-correct="Northbound intent">
+      <p><strong>1.</strong> Which surface does <code>ovn-nbctl show</code> inspect?</p>
+      <button class="answer">Local OVS state</button>
+      <button class="answer">Northbound intent</button>
+      <button class="answer">Southbound flows</button>
+      <p class="feedback" aria-live="polite"></p>
+    </div>
+
+    <div data-question data-correct="Southbound flows">
+      <p><strong>2.</strong> Where should you look for state compiled by <code>ovn-northd</code>?</p>
+      <button class="answer">Northbound intent</button>
+      <button class="answer">Local OVS state</button>
+      <button class="answer">Southbound flows</button>
+      <p class="feedback" aria-live="polite"></p>
+    </div>
+
+    <div data-question data-correct="Local OVS state">
+      <p><strong>3.</strong> Which surface is closest to actual switching behavior on this sandbox chassis?</p>
+      <button class="answer">Southbound flows</button>
+      <button class="answer">Local OVS state</button>
+      <button class="answer">Northbound intent</button>
+      <p class="feedback" aria-live="polite"></p>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>What To Read</h2>
+    <p>Primary source: <a href="../ovn/Documentation/tutorials/ovn-sandbox.rst">OVN sandbox tutorial</a>, especially “Running the sandbox” and “Creating OVN Resources.” Keep <a href="../reference/0001-ovn-control-plane-map.html">the control-plane map</a> open as a reference.</p>
+    <p>If any command output is confusing, ask the agent to explain that exact output. That is the fastest way to connect the model to the real sandbox.</p>
+  </section>
+</main>
+<script>
+  document.querySelectorAll('[data-question]').forEach((question) => {
+    const correct = question.dataset.correct;
+    const feedback = question.querySelector('.feedback');
+    question.querySelectorAll('button').forEach((button) => {
+      button.addEventListener('click', () => {
+        const ok = button.textContent.trim() === correct;
+        feedback.textContent = ok ? 'Correct. You matched the command to the right surface.' : 'Not yet. Re-read the three surfaces, then try again.';
+        feedback.className = ok ? 'feedback correct' : 'feedback incorrect';
+      });
+    });
+  });
+</script>
+</body>
+</html>

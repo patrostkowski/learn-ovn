@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Lesson 5: Add One ACL</title>
+  <link rel="stylesheet" href="../assets/course.css">
+</head>
+<body>
+<main>
+  <span class="tag">Lesson 5</span>
+  <h1>Add One ACL</h1>
+  <p class="subtitle">Your next OVN skill: change Northbound intent and watch the change move into logical flows and trace behavior.</p>
+
+  <section class="card">
+    <h2>The Model</h2>
+    <p>So far you have mostly observed OVN. Now you will change it. An ACL is Northbound intent: <em>traffic matching this expression should get this verdict</em>.</p>
+    <pre><code>acl-add in NB DB
+  -> ovn-northd compiles ACL logical flows in SB DB
+  -> ovn-trace stops showing final output for the dropped packet
+  -> ovn-controller can install changed OpenFlow locally</code></pre>
+    <p>The important move is not memorizing every ACL table. It is seeing one small policy change ripple across the surfaces from Lesson 1.</p>
+  </section>
+
+  <section class="checkpoint">
+    <h2>Sandbox Exercise</h2>
+    <p>Run this from the sandbox shell after <code>./ovn-setup.sh</code>. First, add one ACL to <code>sw0</code>:</p>
+    <pre><code>ovn-nbctl --wait=sb --may-exist acl-add sw0 from-lport 1001 \
+  'inport == "sw0-port1" &amp;&amp; ip4.dst == 11.0.0.2' drop</code></pre>
+
+    <p>Check the Northbound intent:</p>
+    <pre><code>ovn-nbctl acl-list sw0</code></pre>
+
+    <p>Find the compiled Southbound flows. Look for ACL stages such as <code>ls_in_acl_eval</code> and <code>ls_in_acl_action</code>:</p>
+    <pre><code>ovn-sbctl lflow-list sw0</code></pre>
+
+    <p>Trace the same packet from Lesson 2, but mark it as a new connection so ACL behavior is visible:</p>
+    <pre><code>ovn-trace --ct new --minimal sw0 'inport == "sw0-port1" \
+&amp;&amp; eth.src == 50:54:00:00:00:01 &amp;&amp; ip4.src == 192.168.0.2 \
+&amp;&amp; eth.dst == 00:00:00:00:ff:01 &amp;&amp; ip4.dst == 11.0.0.2 \
+&amp;&amp; ip.ttl == 64'</code></pre>
+
+    <p>When you are done, remove exactly the ACL you added:</p>
+    <pre><code>ovn-nbctl --wait=sb acl-del sw0 from-lport 1001 \
+  'inport == "sw0-port1" &amp;&amp; ip4.dst == 11.0.0.2'</code></pre>
+  </section>
+
+  <section class="card">
+    <h2>What To Notice</h2>
+    <div class="grid">
+      <div class="card"><h3>NB intent</h3><p><code>acl-list</code> shows the human policy: direction, priority, match, and verdict.</p></div>
+      <div class="card"><h3>SB compile</h3><p><code>lflow-list</code> shows generated logical flows. The ACL priority is shifted into OVN's internal table priorities.</p></div>
+      <div class="card"><h3>Trace result</h3><p>The dropped packet should no longer end with <code>output("sw1-port1")</code>.</p></div>
+    </div>
+  </section>
+
+  <section class="quiz" data-quiz>
+    <h2>Retrieval Check</h2>
+    <p>Answer from memory before peeking back at the commands.</p>
+
+    <div data-question data-correct="Northbound DB">
+      <p><strong>1.</strong> Where is the ACL first added?</p>
+      <button class="answer">Southbound DB</button>
+      <button class="answer">Northbound DB</button>
+      <button class="answer">OpenFlow DB</button>
+      <p class="feedback" aria-live="polite"></p>
+    </div>
+
+    <div data-question data-correct="ovn-northd">
+      <p><strong>2.</strong> Which daemon compiles the ACL into logical flows?</p>
+      <button class="answer">ovs-vswitchd</button>
+      <button class="answer">ovn-northd</button>
+      <button class="answer">ovn-nbctl</button>
+      <p class="feedback" aria-live="polite"></p>
+    </div>
+
+    <div data-question data-correct="No final output">
+      <p><strong>3.</strong> What is the trace clue that the drop worked?</p>
+      <button class="answer">New switch port</button>
+      <button class="answer">More IP routes</button>
+      <button class="answer">No final output</button>
+      <p class="feedback" aria-live="polite"></p>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>What To Read</h2>
+    <p>Primary source: <a href="../ovn/utilities/ovn-nbctl.8.xml"><code>ovn-nbctl</code> ACL commands</a>. Keep the <a href="../reference/0005-acl-observation-loop.html">ACL observation loop</a> nearby while running the exercise.</p>
+    <p>If the trace output is surprising, ask the agent to decode only the ACL-related lines first.</p>
+  </section>
+</main>
+<script>
+  document.querySelectorAll('[data-question]').forEach((question) => {
+    const correct = question.dataset.correct;
+    const feedback = question.querySelector('.feedback');
+    question.querySelectorAll('button').forEach((button) => {
+      button.addEventListener('click', () => {
+        const ok = button.textContent.trim() === correct;
+        feedback.textContent = ok ? 'Correct. You followed the policy change across OVN.' : 'Not yet. Re-run the observation loop, then try again.';
+        feedback.className = ok ? 'feedback correct' : 'feedback incorrect';
+      });
+    });
+  });
+</script>
+</body>
+</html>

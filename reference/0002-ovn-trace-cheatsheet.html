@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ovn-trace Cheatsheet</title>
+  <link rel="stylesheet" href="../assets/course.css">
+</head>
+<body>
+<main>
+  <span class="tag">Reference</span>
+  <h1><code>ovn-trace</code> Cheatsheet</h1>
+  <p class="subtitle">Use this when you want to ask: “What would OVN do with this packet?”</p>
+
+  <section class="card">
+    <h2>Shape</h2>
+    <pre><code>ovn-trace --minimal &lt;logical-datapath&gt; '&lt;packet-match&gt;'</code></pre>
+    <p><code>&lt;logical-datapath&gt;</code> is usually a logical switch or logical router name. In the tutorial topology, start with <code>sw0</code> or <code>sw1</code>.</p>
+  </section>
+
+  <section class="grid">
+    <div class="card">
+      <h2>Ingress Port</h2>
+      <p>Tell OVN where the hypothetical packet enters.</p>
+      <p><code>inport == "sw0-port1"</code></p>
+    </div>
+    <div class="card">
+      <h2>Ethernet</h2>
+      <p>Set source and destination MACs so port security and routing can match.</p>
+      <p><code>eth.src == 50:54:00:00:00:01</code></p>
+      <p><code>eth.dst == 00:00:00:00:ff:01</code></p>
+    </div>
+    <div class="card">
+      <h2>IP</h2>
+      <p>Set source, destination, and TTL for routed IP behavior.</p>
+      <p><code>ip4.src == 192.168.0.2</code></p>
+      <p><code>ip4.dst == 11.0.0.2</code></p>
+      <p><code>ip.ttl == 64</code></p>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>Read Minimal Output</h2>
+    <p>For the tutorial packet, the important actions are:</p>
+    <pre><code>ip.ttl--;
+eth.src = 00:00:00:00:ff:02;
+eth.dst = 50:54:00:00:00:03;
+output("sw1-port1");</code></pre>
+    <p>Interpretation: the logical router decremented TTL, rewrote Ethernet addresses for the next hop, and delivered the packet to <code>sw1-port1</code>.</p>
+  </section>
+
+  <section class="card">
+    <h2>Primary Sources</h2>
+    <p>Use the local <a href="../ovn/Documentation/tutorials/ovn-sandbox.rst">OVN sandbox tutorial</a>, especially “Using ovn-trace.” For the deeper manual, see <a href="../ovn/utilities/ovn-trace.8.xml">local <code>ovn-trace.8.xml</code></a>.</p>
+  </section>
+</main>
+</body>
+</html>

@@ -1,0 +1,410 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Lesson 9: OpenStack Neutron to OVN</title>
+  <script>
+    (() => {
+      const saved = localStorage.getItem('ovn-course-theme');
+      const systemDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+      document.documentElement.dataset.theme = saved || (systemDark ? 'dark' : 'light');
+    })();
+  </script>
+  <link rel="stylesheet" href="../assets/course.css">
+  <style>
+    html[data-theme="dark"] {
+      color-scheme: dark;
+      --ink: #e5eef8;
+      --muted: #9fb0c5;
+      --paper: #07111f;
+      --panel: #0d1b2d;
+      --line: #23344b;
+      --accent: #93c5fd;
+      --accent-soft: #172554;
+      --code: #dbeafe;
+      --code-bg: #172338;
+      --ok: #86efac;
+      --bad: #fca5a5;
+    }
+
+    .theme-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin: 22px 0; }
+    .theme-toggle { background: var(--panel); color: var(--ink); }
+    .copy-wrap { position: relative; }
+    .copy-button { position: absolute; top: 10px; right: 10px; background: var(--panel); color: var(--ink); }
+    .copy-wrap pre { padding-top: 52px; }
+    .wide-table { width: 100%; border-collapse: collapse; margin: 16px 0; }
+    .wide-table th, .wide-table td { border-bottom: 1px solid var(--line); padding: 10px; text-align: left; vertical-align: top; }
+    .wide-table th { color: var(--muted); font-size: 0.9rem; }
+    .flow { font-size: clamp(1.2rem, 2vw, 1.7rem); font-weight: 750; text-align: center; }
+    .note { color: var(--muted); }
+    .command-notes { margin: 14px 0 0; padding-left: 22px; }
+    .command-notes li { margin: 10px 0; }
+    .command-notes code:first-child { font-weight: 700; }
+
+    html[data-theme="dark"] pre {
+      background: #020617;
+      color: #dbeafe;
+      border: 1px solid var(--line);
+    }
+
+    html[data-theme="dark"] .card,
+    html[data-theme="dark"] .quiz,
+    html[data-theme="dark"] .checkpoint {
+      box-shadow: 0 8px 22px rgba(0, 0, 0, 0.32);
+    }
+
+    @media (max-width: 760px) {
+      .wide-table, .wide-table thead, .wide-table tbody, .wide-table th, .wide-table td, .wide-table tr { display: block; }
+      .wide-table thead { display: none; }
+      .wide-table td { padding: 8px 0; }
+      .wide-table tr { border-bottom: 1px solid var(--line); padding: 10px 0; }
+    }
+  </style>
+</head>
+<body>
+<main>
+  <span class="tag">Lesson 9</span>
+  <h1>OpenStack Neutron to OVN</h1>
+  <p class="subtitle">Learn how Neutron's ML2/OVN driver turns OpenStack networks, subnets, ports, routers, floating IPs, SNAT, and security groups into OVN Northbound objects you can create by hand in the sandbox.</p>
+
+  <div class="theme-row">
+    <p class="subtitle">Theme follows your system preference until you switch it here.</p>
+    <button class="theme-toggle" type="button" data-theme-toggle aria-label="Toggle dark mode">Use dark mode</button>
+  </div>
+
+  <section class="card">
+    <h2>The Model</h2>
+    <p>OpenStack users create Neutron resources through the OpenStack API. With the OVN mechanism driver enabled, Neutron writes OVN Northbound rows. After that, the path is the same OVN pipeline you already know: <code>ovn-northd</code> compiles Northbound state into Southbound logical flows, and <code>ovn-controller</code> programs local OVS.</p>
+    <p class="flow">OpenStack API -> Neutron ML2/OVN -> OVN NB object -> SB logical flows -> OVS OpenFlow</p>
+    <p>This lesson does not run OpenStack. It recreates the OVN objects Neutron would write, using sandbox commands.</p>
+  </section>
+
+  <section class="card">
+    <h2>Translation Map</h2>
+    <p>Use this table when reading Neutron code or inspecting an OVN database created by OpenStack.</p>
+    <table class="wide-table">
+      <thead>
+        <tr><th>OpenStack abstraction</th><th>Main source path</th><th>OVN underneath</th><th>Sandbox command family</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Network</td><td><a href="../../openstack/neutron/neutron/plugins/ml2/drivers/ovn/mech_driver/ovsdb/ovn_client.py"><code>ovn_client.py:create_network</code></a></td><td><code>Logical_Switch</code> named <code>neutron-&lt;network-uuid&gt;</code></td><td><code>ls-add</code>, <code>set Logical_Switch</code></td></tr>
+        <tr><td>Subnet with DHCP</td><td><a href="../../openstack/neutron/neutron/plugins/ml2/drivers/ovn/mech_driver/ovsdb/ovn_client.py"><code>ovn_client.py:create_subnet</code></a></td><td><code>DHCP_Options</code>, then references from logical switch ports</td><td><code>create DHCP_Options</code>, <code>set Logical_Switch_Port</code></td></tr>
+        <tr><td>Port</td><td><a href="../../openstack/neutron/neutron/plugins/ml2/drivers/ovn/mech_driver/ovsdb/ovn_client.py"><code>ovn_client.py:create_port</code></a></td><td><code>Logical_Switch_Port</code> named as the Neutron port UUID</td><td><code>lsp-add</code>, <code>lsp-set-addresses</code>, <code>lsp-set-port-security</code></td></tr>
+        <tr><td>Nova binding</td><td><a href="../../openstack/neutron/neutron/plugins/ml2/drivers/ovn/mech_driver/ovsdb/ovn_client.py"><code>ovn_client.py:create_port</code></a></td><td>OVS interface with <code>external_ids:iface-id</code> matching the Neutron port ID</td><td><code>ovs-vsctl add-port</code>, <code>ovn-sbctl list Port_Binding</code></td></tr>
+        <tr><td>Router</td><td><a href="../../openstack/neutron/neutron/plugins/ml2/drivers/ovn/mech_driver/ovsdb/ovn_client.py"><code>ovn_client.py:create_router</code></a></td><td><code>Logical_Router</code> named <code>neutron-&lt;router-uuid&gt;</code></td><td><code>lr-add</code>, <code>set Logical_Router</code></td></tr>
+        <tr><td>Router interface</td><td><a href="../../openstack/neutron/neutron/plugins/ml2/drivers/ovn/mech_driver/ovsdb/ovn_client.py"><code>ovn_client.py:create_router_port</code></a></td><td><code>Logical_Router_Port</code> named <code>lrp-&lt;port-uuid&gt;</code> plus router-type LSP</td><td><code>lrp-add</code>, <code>lsp-set-type router</code></td></tr>
+        <tr><td>Router gateway and SNAT</td><td><a href="../../openstack/neutron/neutron/plugins/ml2/drivers/ovn/mech_driver/ovsdb/ovn_client.py"><code>_add_router_ext_gw</code>, <code>update_nat_rules</code></a></td><td>Gateway LRP, static default route, NAT row type <code>snat</code></td><td><code>lrp-add</code>, <code>lr-route-add</code>, <code>lr-nat-add ... snat</code></td></tr>
+        <tr><td>Floating IP</td><td><a href="../../openstack/neutron/neutron/plugins/ml2/drivers/ovn/mech_driver/ovsdb/ovn_client.py"><code>_create_or_update_floatingip</code></a></td><td>NAT row type <code>dnat_and_snat</code></td><td><code>lr-nat-add ... dnat_and_snat</code></td></tr>
+        <tr><td>Security group</td><td><a href="../../openstack/neutron/neutron/common/ovn/acl.py"><code>acl.py</code></a></td><td><code>Port_Group</code> plus ACLs</td><td><code>pg-add</code>, <code>pg-add-port</code>, <code>acl-add</code></td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section class="card">
+    <h2>Naming Rules</h2>
+    <p>Production Neutron uses UUIDs. The sandbox uses readable names so you can see the mapping.</p>
+    <table class="wide-table">
+      <thead>
+        <tr><th>Neutron helper</th><th>Production form</th><th>This lesson uses</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><code>ovn_name(network_id)</code></td><td><code>neutron-&lt;network-uuid&gt;</code></td><td><code>neutron-os-net-a</code></td></tr>
+        <tr><td><code>ovn_name(router_id)</code></td><td><code>neutron-&lt;router-uuid&gt;</code></td><td><code>neutron-os-router-a</code></td></tr>
+        <tr><td><code>ovn_lrouter_port_name(port_id)</code></td><td><code>lrp-&lt;port-uuid&gt;</code></td><td><code>lrp-os-router-if-a</code></td></tr>
+        <tr><td>Neutron port ID</td><td><code>&lt;port-uuid&gt;</code></td><td><code>os-port-a</code></td></tr>
+        <tr><td><code>ovn_port_group_name(sg_id)</code></td><td><code>pg-&lt;security-group-uuid&gt;</code>, dashes changed to underscores</td><td><code>pg-os-sg-web</code></td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section class="checkpoint">
+    <h2>Before You Start</h2>
+    <p>Run this lesson in the sandbox shell. If your sandbox is fresh, recreate the tutorial topology first:</p>
+    <pre data-copy><code>./ovn-setup.sh</code></pre>
+    <ol class="command-notes">
+      <li><code>./ovn-setup.sh</code> creates the original tutorial topology. The OpenStack lab creates separate objects using <code>os-</code> and <code>neutron-</code> names so it does not overwrite the tutorial switches and router.</li>
+    </ol>
+  </section>
+
+  <section class="checkpoint">
+    <h2>Lab 1: Network</h2>
+    <p>A Neutron network is usually represented by an OVN logical switch. Neutron names it with <code>neutron-&lt;network-uuid&gt;</code> and stores identity metadata in <code>external_ids</code>.</p>
+    <pre data-copy><code>ovn-nbctl --may-exist ls-add neutron-os-net-a
+ovn-nbctl set Logical_Switch neutron-os-net-a 'external_ids:"neutron:network_name"=demo-net' 'external_ids:"neutron:network_id"=os-net-a' 'external_ids:"neutron:mtu"=1442' 'external_ids:"neutron:provnet-network-type"=geneve'
+ovn-nbctl show neutron-os-net-a</code></pre>
+    <ol class="command-notes">
+      <li><code>ovn-nbctl --may-exist ls-add neutron-os-net-a</code> creates the logical switch that stands in for an OpenStack tenant network.</li>
+      <li><code>ovn-nbctl set Logical_Switch neutron-os-net-a ...</code> adds Neutron-style metadata. Neutron uses <code>external_ids</code> to remember the OpenStack network name, network ID, MTU, and provider network type.</li>
+      <li><code>ovn-nbctl show neutron-os-net-a</code> prints the Northbound logical switch so you can confirm the network object exists.</li>
+    </ol>
+  </section>
+
+  <section class="checkpoint">
+    <h2>Lab 2: Port</h2>
+    <p>A Neutron port becomes an OVN logical switch port. In production, the LSP name is the Neutron port UUID. That exact same string is also used later as the local OVS <code>iface-id</code>.</p>
+    <pre data-copy><code>ovn-nbctl --may-exist lsp-add neutron-os-net-a os-port-a
+ovn-nbctl lsp-set-addresses os-port-a "50:54:00:00:20:10 10.20.0.10"
+ovn-nbctl lsp-set-port-security os-port-a "50:54:00:00:20:10 10.20.0.10"
+ovn-nbctl set Logical_Switch_Port os-port-a 'external_ids:"neutron:port_name"=demo-vm-port' 'external_ids:"neutron:port_id"=os-port-a' 'external_ids:"neutron:network_name"=neutron-os-net-a' 'external_ids:"neutron:device_owner"=compute:nova'</code></pre>
+    <ol class="command-notes">
+      <li><code>ovn-nbctl --may-exist lsp-add neutron-os-net-a os-port-a</code> creates a logical switch port on the Neutron network. Think of <code>os-port-a</code> as a readable stand-in for a Neutron port UUID.</li>
+      <li><code>ovn-nbctl lsp-set-addresses os-port-a "50:54:00:00:20:10 10.20.0.10"</code> gives the port the MAC/IP pair assigned by Neutron IPAM.</li>
+      <li><code>ovn-nbctl lsp-set-port-security os-port-a "50:54:00:00:20:10 10.20.0.10"</code> limits the port to that allowed MAC/IP pair, matching Neutron port-security behavior.</li>
+      <li><code>ovn-nbctl set Logical_Switch_Port os-port-a ...</code> stores Neutron metadata on the OVN row: port name, port ID, parent network name, and the <code>compute:nova</code> device owner.</li>
+    </ol>
+    <p>Inspect it:</p>
+    <pre data-copy><code>ovn-nbctl lsp-list neutron-os-net-a
+ovn-nbctl list Logical_Switch_Port os-port-a</code></pre>
+    <ol class="command-notes">
+      <li><code>ovn-nbctl lsp-list neutron-os-net-a</code> lists logical switch ports attached to the OpenStack-like network.</li>
+      <li><code>ovn-nbctl list Logical_Switch_Port os-port-a</code> prints the full row, including addresses, port security, and <code>external_ids</code>.</li>
+    </ol>
+  </section>
+
+  <section class="checkpoint">
+    <h2>Lab 3: Subnet DHCP</h2>
+    <p>A Neutron subnet is partly Neutron database state. When DHCP is enabled, ML2/OVN creates OVN <code>DHCP_Options</code> rows and attaches them to logical switch ports.</p>
+    <pre data-copy><code>ovn-nbctl --id=@os_dhcp create DHCP_Options cidr=10.20.0.0/24 options:server_id=10.20.0.1 options:server_mac=00:00:00:00:20:01 options:lease_time=3600 options:router=10.20.0.1 options:mtu=1442 external_ids:subnet_id=os-subnet-a 'external_ids:"neutron:network_id"=os-net-a' -- set Logical_Switch_Port os-port-a dhcpv4_options=@os_dhcp</code></pre>
+    <ol class="command-notes">
+      <li><code>ovn-nbctl --id=@os_dhcp create DHCP_Options ...</code> creates one DHCP options row for subnet <code>10.20.0.0/24</code>. The row contains the gateway/router IP, server MAC, lease time, and MTU that Neutron would derive from the subnet and network.</li>
+      <li><code>-- set Logical_Switch_Port os-port-a dhcpv4_options=@os_dhcp</code> attaches that DHCP options row to the logical switch port. Neutron does this when a port should receive OVN native DHCP service.</li>
+    </ol>
+    <p>Inspect it:</p>
+    <pre data-copy><code>ovn-nbctl list DHCP_Options
+ovn-nbctl get Logical_Switch_Port os-port-a dhcpv4_options</code></pre>
+    <ol class="command-notes">
+      <li><code>ovn-nbctl list DHCP_Options</code> shows the DHCP rows currently in the Northbound database.</li>
+      <li><code>ovn-nbctl get Logical_Switch_Port os-port-a dhcpv4_options</code> confirms that <code>os-port-a</code> references the DHCP row.</li>
+    </ol>
+  </section>
+
+  <section class="checkpoint">
+    <h2>Lab 4: Nova Binding</h2>
+    <p>Neutron's source is explicit: the logical switch port name must match the local OVS interface <code>external_ids:iface-id</code> that Nova sets. That string is how <code>ovn-controller</code> knows which local interface claims which logical port.</p>
+    <pre data-copy><code>ovs-vsctl --may-exist add-port br-int os-vif-a -- set Interface os-vif-a external_ids:iface-id=os-port-a
+ovs-vsctl get Interface os-vif-a external_ids:iface-id
+ovn-sbctl list Port_Binding os-port-a</code></pre>
+    <ol class="command-notes">
+      <li><code>ovs-vsctl --may-exist add-port br-int os-vif-a -- set Interface os-vif-a external_ids:iface-id=os-port-a</code> creates a local OVS interface in the sandbox and claims the OVN logical port by setting <code>iface-id</code> to <code>os-port-a</code>.</li>
+      <li><code>ovs-vsctl get Interface os-vif-a external_ids:iface-id</code> verifies the local OVS join key.</li>
+      <li><code>ovn-sbctl list Port_Binding os-port-a</code> inspects the Southbound port binding created by <code>ovn-northd</code>. After local binding, this is where you look for chassis-related binding state.</li>
+    </ol>
+  </section>
+
+  <section class="checkpoint">
+    <h2>Lab 5: Router Interface</h2>
+    <p>An OpenStack router becomes an OVN logical router. Adding a router interface creates a router-side LRP and connects it to the network with a router-type logical switch port.</p>
+    <pre data-copy><code>ovn-nbctl --may-exist lr-add neutron-os-router-a
+ovn-nbctl set Logical_Router neutron-os-router-a 'external_ids:"neutron:router_name"=demo-router' 'external_ids:"neutron:router_id"=os-router-a'
+ovn-nbctl --may-exist lrp-add neutron-os-router-a lrp-os-router-if-a 00:00:00:00:20:01 10.20.0.1/24
+ovn-nbctl --may-exist lsp-add neutron-os-net-a os-router-if-a
+ovn-nbctl lsp-set-type os-router-if-a router
+ovn-nbctl lsp-set-addresses os-router-if-a 00:00:00:00:20:01
+ovn-nbctl lsp-set-options os-router-if-a router-port=lrp-os-router-if-a</code></pre>
+    <ol class="command-notes">
+      <li><code>ovn-nbctl --may-exist lr-add neutron-os-router-a</code> creates the logical router representing an OpenStack router.</li>
+      <li><code>ovn-nbctl set Logical_Router neutron-os-router-a ...</code> stores Neutron router identity metadata on the router row.</li>
+      <li><code>ovn-nbctl --may-exist lrp-add neutron-os-router-a lrp-os-router-if-a 00:00:00:00:20:01 10.20.0.1/24</code> creates the router-side interface for the tenant subnet. In production the name would be <code>lrp-&lt;neutron-router-interface-port-uuid&gt;</code>.</li>
+      <li><code>ovn-nbctl --may-exist lsp-add neutron-os-net-a os-router-if-a</code> creates the switch-side port that attaches the network to the router.</li>
+      <li><code>ovn-nbctl lsp-set-type os-router-if-a router</code> marks the switch-side port as a router attachment, not a VM port.</li>
+      <li><code>ovn-nbctl lsp-set-addresses os-router-if-a 00:00:00:00:20:01</code> sets the router MAC visible from the tenant logical switch.</li>
+      <li><code>ovn-nbctl lsp-set-options os-router-if-a router-port=lrp-os-router-if-a</code> links the switch-side port to the router-side LRP.</li>
+    </ol>
+    <p>Inspect it:</p>
+    <pre data-copy><code>ovn-nbctl show neutron-os-router-a
+ovn-sbctl lflow-list neutron-os-router-a</code></pre>
+    <ol class="command-notes">
+      <li><code>ovn-nbctl show neutron-os-router-a</code> shows the router and its router interface.</li>
+      <li><code>ovn-sbctl lflow-list neutron-os-router-a</code> shows the logical router flows compiled from the Northbound router state.</li>
+    </ol>
+  </section>
+
+  <section class="checkpoint">
+    <h2>Lab 6: Gateway + SNAT</h2>
+    <p>When an OpenStack router gets an external gateway and SNAT is enabled, Neutron adds a gateway router port, a default route, and one or more <code>snat</code> NAT rows. Gateway chassis scheduling and real provider networking need a real deployment, so this lab models only the OVN NB objects.</p>
+    <pre data-copy><code>ovn-nbctl --may-exist ls-add neutron-os-ext-net
+ovn-nbctl set Logical_Switch neutron-os-ext-net 'external_ids:"neutron:network_name"=public' 'external_ids:"neutron:network_id"=os-ext-net' 'external_ids:"neutron:provnet-network-type"=flat' 'external_ids:"neutron:provnet-physical-network"=physnet1'
+ovn-nbctl --may-exist lrp-add neutron-os-router-a lrp-os-gw 00:00:00:00:ee:01 172.24.4.10/24
+ovn-nbctl --may-exist lsp-add neutron-os-ext-net os-gw-port
+ovn-nbctl lsp-set-type os-gw-port router
+ovn-nbctl lsp-set-addresses os-gw-port 00:00:00:00:ee:01
+ovn-nbctl lsp-set-options os-gw-port router-port=lrp-os-gw
+ovn-nbctl lr-route-add neutron-os-router-a 0.0.0.0/0 172.24.4.1
+ovn-nbctl --may-exist lr-nat-add neutron-os-router-a snat 172.24.4.10 10.20.0.0/24</code></pre>
+    <ol class="command-notes">
+      <li><code>ovn-nbctl --may-exist ls-add neutron-os-ext-net</code> creates a logical switch representing the external provider network.</li>
+      <li><code>ovn-nbctl set Logical_Switch neutron-os-ext-net ...</code> marks the switch with Neutron provider-network metadata such as <code>flat</code> and <code>physnet1</code>.</li>
+      <li><code>ovn-nbctl --may-exist lrp-add neutron-os-router-a lrp-os-gw 00:00:00:00:ee:01 172.24.4.10/24</code> creates the router's gateway-side LRP with an address on the external network.</li>
+      <li><code>ovn-nbctl --may-exist lsp-add neutron-os-ext-net os-gw-port</code> creates the external switch-side attachment port.</li>
+      <li><code>ovn-nbctl lsp-set-type os-gw-port router</code> marks the external switch port as a router attachment.</li>
+      <li><code>ovn-nbctl lsp-set-addresses os-gw-port 00:00:00:00:ee:01</code> sets the MAC address used on the external logical switch.</li>
+      <li><code>ovn-nbctl lsp-set-options os-gw-port router-port=lrp-os-gw</code> links the external switch-side port to the gateway LRP.</li>
+      <li><code>ovn-nbctl lr-route-add neutron-os-router-a 0.0.0.0/0 172.24.4.1</code> creates the router's default route toward the external gateway IP.</li>
+      <li><code>ovn-nbctl --may-exist lr-nat-add neutron-os-router-a snat 172.24.4.10 10.20.0.0/24</code> creates a SNAT rule translating tenant source addresses from <code>10.20.0.0/24</code> to external address <code>172.24.4.10</code>.</li>
+    </ol>
+    <p>Inspect it:</p>
+    <pre data-copy><code>ovn-nbctl lr-route-list neutron-os-router-a
+ovn-nbctl lr-nat-list neutron-os-router-a</code></pre>
+    <ol class="command-notes">
+      <li><code>ovn-nbctl lr-route-list neutron-os-router-a</code> shows the default route created for the external gateway.</li>
+      <li><code>ovn-nbctl lr-nat-list neutron-os-router-a</code> shows the router NAT table, including the SNAT row.</li>
+    </ol>
+  </section>
+
+  <section class="checkpoint">
+    <h2>Lab 7: Floating IP</h2>
+    <p>A Neutron floating IP is represented by an OVN NAT row with type <code>dnat_and_snat</code>. This maps one external address to one internal port/IP in both directions.</p>
+    <pre data-copy><code>ovn-nbctl --may-exist lr-nat-add neutron-os-router-a dnat_and_snat 172.24.4.101 10.20.0.10 os-port-a 50:54:00:00:20:10
+ovn-nbctl set Logical_Switch_Port os-port-a 'external_ids:"neutron:port_fip"=172.24.4.101'
+ovn-nbctl lr-nat-list neutron-os-router-a</code></pre>
+    <ol class="command-notes">
+      <li><code>ovn-nbctl --may-exist lr-nat-add neutron-os-router-a dnat_and_snat 172.24.4.101 10.20.0.10 os-port-a 50:54:00:00:20:10</code> creates the floating-IP NAT row. External IP <code>172.24.4.101</code> maps to internal IP <code>10.20.0.10</code> on logical port <code>os-port-a</code>.</li>
+      <li><code>ovn-nbctl set Logical_Switch_Port os-port-a 'external_ids:"neutron:port_fip"=172.24.4.101'</code> records the floating IP on the private logical switch port, matching Neutron's habit of annotating the LSP for related consumers.</li>
+      <li><code>ovn-nbctl lr-nat-list neutron-os-router-a</code> verifies both the SNAT and floating-IP NAT rows on the router.</li>
+    </ol>
+  </section>
+
+  <section class="checkpoint">
+    <h2>Lab 8: Security Group</h2>
+    <p>Neutron security groups are modeled as OVN port groups plus ACLs. Security group rules become ACLs against the port group. Neutron commonly uses priority <code>1002</code> for allow rules and action <code>allow-related</code> for stateful behavior.</p>
+    <pre data-copy><code>ovn-nbctl --may-exist pg-add pg-os-sg-web
+ovn-nbctl pg-add-port pg-os-sg-web os-port-a
+ovn-nbctl --may-exist acl-add pg-os-sg-web to-lport 1002 'outport == @pg-os-sg-web &amp;&amp; ip4 &amp;&amp; tcp &amp;&amp; tcp.dst == 22' allow-related
+ovn-nbctl --may-exist acl-add pg-os-sg-web from-lport 1002 'inport == @pg-os-sg-web &amp;&amp; ip4' allow-related
+ovn-nbctl acl-list pg-os-sg-web</code></pre>
+    <ol class="command-notes">
+      <li><code>ovn-nbctl --may-exist pg-add pg-os-sg-web</code> creates the OVN port group that represents a Neutron security group.</li>
+      <li><code>ovn-nbctl pg-add-port pg-os-sg-web os-port-a</code> adds the VM logical switch port to the security group target set.</li>
+      <li><code>ovn-nbctl --may-exist acl-add pg-os-sg-web to-lport 1002 'outport == @pg-os-sg-web &amp;&amp; ip4 &amp;&amp; tcp &amp;&amp; tcp.dst == 22' allow-related</code> creates an ingress-style allow rule for IPv4 TCP port 22 to any port in the group.</li>
+      <li><code>ovn-nbctl --may-exist acl-add pg-os-sg-web from-lport 1002 'inport == @pg-os-sg-web &amp;&amp; ip4' allow-related</code> creates an egress-style allow rule for IPv4 traffic leaving any port in the group.</li>
+      <li><code>ovn-nbctl acl-list pg-os-sg-web</code> prints the ACLs attached to the port group.</li>
+    </ol>
+  </section>
+
+  <section class="card">
+    <h2>What The Sandbox Cannot Fully Show</h2>
+    <div class="grid">
+      <div class="card"><h3>OpenStack API and DB</h3><p>The sandbox cannot show Neutron API validation, quota checks, SQL state, revision tracking, or RPC/event sequencing.</p></div>
+      <div class="card"><h3>Provider Networks</h3><p>Real flat/VLAN provider networks need bridge mappings, physical NICs, gateway chassis scheduling, and external reachability. The dummy sandbox can model the NB rows, not the real underlay.</p></div>
+      <div class="card"><h3>Metadata and DHCP Agents</h3><p>OVN native DHCP rows are visible, but OpenStack metadata service behavior and deployment-specific options need a real cloud.</p></div>
+      <div class="card"><h3>Octavia Load Balancers</h3><p>Core Neutron floating IPs are covered here. OpenStack load balancers live mostly in Octavia and need a separate lesson/source checkout.</p></div>
+    </div>
+  </section>
+
+  <section class="checkpoint">
+    <h2>Cleanup</h2>
+    <p>Remove the lesson-created objects when you are done:</p>
+    <pre data-copy><code>ovn-nbctl clear Logical_Switch_Port os-port-a dhcpv4_options
+ovn-nbctl --bare --columns=_uuid find DHCP_Options external_ids:subnet_id=os-subnet-a | xargs -r -n1 ovn-nbctl dhcp-options-del
+ovs-vsctl --if-exists del-port os-vif-a
+ovn-nbctl --if-exists pg-del pg-os-sg-web
+ovn-nbctl --if-exists lr-del neutron-os-router-a
+ovn-nbctl --if-exists ls-del neutron-os-ext-net
+ovn-nbctl --if-exists ls-del neutron-os-net-a</code></pre>
+    <ol class="command-notes">
+      <li><code>ovn-nbctl clear Logical_Switch_Port os-port-a dhcpv4_options</code> detaches the DHCP options row from the VM logical switch port before deleting the row.</li>
+      <li><code>ovn-nbctl --bare --columns=_uuid find DHCP_Options external_ids:subnet_id=os-subnet-a | xargs -r -n1 ovn-nbctl dhcp-options-del</code> finds lesson DHCP rows by subnet metadata and deletes them.</li>
+      <li><code>ovs-vsctl --if-exists del-port os-vif-a</code> removes the local OVS interface used to demonstrate Nova binding.</li>
+      <li><code>ovn-nbctl --if-exists pg-del pg-os-sg-web</code> deletes the security-group-like port group and its ACLs.</li>
+      <li><code>ovn-nbctl --if-exists lr-del neutron-os-router-a</code> deletes the logical router, including its router ports, routes, and NAT rows.</li>
+      <li><code>ovn-nbctl --if-exists ls-del neutron-os-ext-net</code> deletes the external-network logical switch.</li>
+      <li><code>ovn-nbctl --if-exists ls-del neutron-os-net-a</code> deletes the tenant-network logical switch and remaining switch ports.</li>
+    </ol>
+  </section>
+
+  <section class="quiz" data-quiz>
+    <h2>Retrieval Check</h2>
+    <p>Answer from memory before peeking back at the tables.</p>
+
+    <div data-question data-correct="Logical switch">
+      <p><strong>1.</strong> What OVN object is behind a normal Neutron network?</p>
+      <button class="answer">Logical router</button>
+      <button class="answer">Logical switch</button>
+      <button class="answer">Port binding</button>
+      <p class="feedback" aria-live="polite"></p>
+    </div>
+
+    <div data-question data-correct="iface-id">
+      <p><strong>2.</strong> Which OVS external ID must match the Neutron port ID?</p>
+      <button class="answer">iface-id</button>
+      <button class="answer">router-id</button>
+      <button class="answer">subnet-id</button>
+      <p class="feedback" aria-live="polite"></p>
+    </div>
+
+    <div data-question data-correct="dnat_and_snat">
+      <p><strong>3.</strong> Which OVN NAT type backs a Neutron floating IP?</p>
+      <button class="answer">snat</button>
+      <button class="answer">dnat_and_snat</button>
+      <button class="answer">load_balance</button>
+      <p class="feedback" aria-live="polite"></p>
+    </div>
+
+    <div data-question data-correct="Port group">
+      <p><strong>4.</strong> What OVN object represents a Neutron security group target set?</p>
+      <button class="answer">DHCP row</button>
+      <button class="answer">NAT rule</button>
+      <button class="answer">Port group</button>
+      <p class="feedback" aria-live="polite"></p>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>Primary Sources</h2>
+    <p>Read these next to the lesson: <a href="../../openstack/neutron/neutron/plugins/ml2/drivers/ovn/mech_driver/ovsdb/ovn_client.py"><code>ovn_client.py</code></a>, <a href="../../openstack/neutron/neutron/plugins/ml2/drivers/ovn/mech_driver/ovsdb/commands.py"><code>commands.py</code></a>, <a href="../../openstack/neutron/neutron/common/ovn/utils.py"><code>utils.py</code></a>, <a href="../../openstack/neutron/neutron/common/ovn/constants.py"><code>constants.py</code></a>, <a href="../../openstack/neutron/neutron/common/ovn/acl.py"><code>acl.py</code></a>, and <a href="../../openstack/neutron/neutron/services/ovn_l3/plugin.py"><code>services/ovn_l3/plugin.py</code></a>.</p>
+    <p>For command syntax, keep <a href="../ovn/utilities/ovn-nbctl.8.xml"><code>ovn-nbctl.8.xml</code></a> open. If any output is unclear, ask me to interpret it with you.</p>
+  </section>
+</main>
+
+<script>
+  document.querySelectorAll('pre[data-copy]').forEach((pre) => {
+    const wrapper = document.createElement('div');
+    wrapper.className = 'copy-wrap';
+    pre.parentNode.insertBefore(wrapper, pre);
+    wrapper.appendChild(pre);
+
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'copy-button';
+    button.textContent = 'Copy to pastebin';
+    button.addEventListener('click', async () => {
+      try {
+        await navigator.clipboard.writeText(pre.textContent.trim());
+        button.textContent = 'Copied';
+        setTimeout(() => { button.textContent = 'Copy to pastebin'; }, 1200);
+      } catch (_) {
+        button.textContent = 'Select manually';
+      }
+    });
+    wrapper.appendChild(button);
+  });
+
+  const themeButton = document.querySelector('[data-theme-toggle]');
+  const setThemeButton = () => {
+    const dark = document.documentElement.dataset.theme === 'dark';
+    themeButton.textContent = dark ? 'Use light mode' : 'Use dark mode';
+    themeButton.setAttribute('aria-pressed', String(dark));
+  };
+  themeButton.addEventListener('click', () => {
+    const next = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark';
+    document.documentElement.dataset.theme = next;
+    localStorage.setItem('ovn-course-theme', next);
+    setThemeButton();
+  });
+  setThemeButton();
+
+  document.querySelectorAll('[data-question]').forEach((question) => {
+    const correct = question.dataset.correct;
+    const feedback = question.querySelector('.feedback');
+    question.querySelectorAll('.answer').forEach((button) => {
+      button.addEventListener('click', () => {
+        const ok = button.textContent.trim() === correct;
+        feedback.textContent = ok ? 'Correct. Say why before moving on.' : 'Not quite. Re-read the model, then try again.';
+        feedback.className = 'feedback ' + (ok ? 'correct' : 'incorrect');
+      });
+    });
+  });
+</script>
+</body>
+</html>

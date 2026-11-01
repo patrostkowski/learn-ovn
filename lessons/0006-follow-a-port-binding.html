@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Lesson 6: Follow a Port Binding</title>
+  <link rel="stylesheet" href="../assets/course.css">
+</head>
+<body>
+<main>
+  <span class="tag">Lesson 6</span>
+  <h1>Follow a Port Binding</h1>
+  <p class="subtitle">Your next OVN skill: connect a logical port name to the local OVS interface that realizes it.</p>
+
+  <section class="card">
+    <h2>The Model</h2>
+    <p>A logical switch port is OVN's name for an attachment point. A local OVS interface realizes that attachment point when its <code>external_ids:iface-id</code> equals the logical port name.</p>
+    <pre><code>NB Logical_Switch_Port: sw0-port1
+  -> SB Port_Binding: logical_port=sw0-port1
+  -> local OVS Interface p1: external_ids:iface-id=sw0-port1
+  -> ovn-controller binds the Port_Binding to this chassis</code></pre>
+    <p>The join key is the name <code>sw0-port1</code>. Follow that string across the three surfaces.</p>
+  </section>
+
+  <section class="checkpoint">
+    <h2>Sandbox Exercise</h2>
+    <p>Run these in the sandbox shell after <code>./ovn-setup.sh</code>.</p>
+
+    <p>Start in the Northbound DB:</p>
+    <pre><code>ovn-nbctl lsp-list sw0
+ovn-nbctl lsp-get-addresses sw0-port1</code></pre>
+
+    <p>Move to the Southbound binding row:</p>
+    <pre><code>ovn-sbctl list port_binding sw0-port1</code></pre>
+
+    <p>Now find the local OVS interface that claims the same logical port:</p>
+    <pre><code>ovs-vsctl get Interface p1 external_ids:iface-id
+ovs-vsctl list Interface p1</code></pre>
+
+    <p>Compare with the second sandbox port:</p>
+    <pre><code>ovs-vsctl get Interface p2 external_ids:iface-id
+ovn-sbctl list port_binding sw1-port1</code></pre>
+  </section>
+
+  <section class="card">
+    <h2>What To Notice</h2>
+    <div class="grid">
+      <div class="card"><h3>Logical name</h3><p><code>sw0-port1</code> is not a Linux device name. It is OVN's logical port name.</p></div>
+      <div class="card"><h3>Local device</h3><p><code>p1</code> is the sandbox's OVS interface name. It claims <code>sw0-port1</code> through <code>iface-id</code>.</p></div>
+      <div class="card"><h3>Binding row</h3><p><code>Port_Binding</code> is the Southbound row where OVN records how the logical port is realized.</p></div>
+    </div>
+  </section>
+
+  <section class="quiz" data-quiz>
+    <h2>Retrieval Check</h2>
+    <p>Answer from memory before peeking back at the model.</p>
+
+    <div data-question data-correct="sw0-port1">
+      <p><strong>1.</strong> What is the join key between the logical port and local interface?</p>
+      <button class="answer">sw0-port1</button>
+      <button class="answer">br-int</button>
+      <button class="answer">lrp0</button>
+      <p class="feedback" aria-live="polite"></p>
+    </div>
+
+    <div data-question data-correct="iface-id">
+      <p><strong>2.</strong> Which OVS external ID names the logical port?</p>
+      <button class="answer">iface-id</button>
+      <button class="answer">system-id</button>
+      <button class="answer">ofport-id</button>
+      <p class="feedback" aria-live="polite"></p>
+    </div>
+
+    <div data-question data-correct="Port_Binding">
+      <p><strong>3.</strong> Which Southbound table represents the binding?</p>
+      <button class="answer">Port_Group</button>
+      <button class="answer">Port_Binding</button>
+      <button class="answer">Logical_Flow</button>
+      <p class="feedback" aria-live="polite"></p>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>What To Read</h2>
+    <p>Primary source: <a href="../ovn/ovn-sb.5"><code>ovn-sb.5</code> Port_Binding table</a>. Keep the <a href="../reference/0006-port-binding-map.html">port binding map</a> nearby while comparing <code>sw0-port1</code> and <code>sw1-port1</code>.</p>
+    <p>If any row has too much detail, ask the agent to decode only the fields <code>logical_port</code>, <code>chassis</code>, <code>mac</code>, and <code>type</code>.</p>
+  </section>
+</main>
+<script>
+  document.querySelectorAll('[data-question]').forEach((question) => {
+    const correct = question.dataset.correct;
+    const feedback = question.querySelector('.feedback');
+    question.querySelectorAll('button').forEach((button) => {
+      button.addEventListener('click', () => {
+        const ok = button.textContent.trim() === correct;
+        feedback.textContent = ok ? 'Correct. You followed the port across the binding chain.' : 'Not yet. Find the same string in all three places, then try again.';
+        feedback.className = ok ? 'feedback correct' : 'feedback incorrect';
+      });
+    });
+  });
+</script>
+</body>
+</html>

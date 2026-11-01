@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Lesson 2: Trace One Packet</title>
+  <link rel="stylesheet" href="../assets/course.css">
+</head>
+<body>
+<main>
+  <span class="tag">Lesson 2</span>
+  <h1>Trace One Packet</h1>
+  <p class="subtitle">Your next OVN skill: describe what OVN would do to a packet before you look at OpenFlow.</p>
+
+  <section class="card">
+    <h2>The Model</h2>
+    <p><code>ovn-trace</code> does not send a real packet. It asks OVN to evaluate a hypothetical packet through the logical pipeline described in the Southbound database.</p>
+    <p>In the tutorial topology, one packet starts on <code>sw0-port1</code>, enters the logical router through <code>lrp0</code>, exits through <code>lrp1</code>, and lands on <code>sw1-port1</code>.</p>
+    <div class="grid">
+      <div class="card"><h3>Start</h3><p><code>sw0-port1</code><br>MAC <code>50:54:00:00:00:01</code><br>IP <code>192.168.0.2</code></p></div>
+      <div class="card"><h3>Router</h3><p><code>lr0</code><br><code>lrp0</code>: <code>192.168.0.1</code><br><code>lrp1</code>: <code>11.0.0.1</code></p></div>
+      <div class="card"><h3>Finish</h3><p><code>sw1-port1</code><br>MAC <code>50:54:00:00:00:03</code><br>IP <code>11.0.0.2</code></p></div>
+    </div>
+  </section>
+
+  <section class="checkpoint">
+    <h2>Sandbox Exercise</h2>
+    <p>In your running sandbox shell, make sure the tutorial topology exists, then trace one packet.</p>
+    <pre><code>./ovn-setup.sh
+
+ovn-trace --minimal sw0 'inport == "sw0-port1" \
+&& eth.src == 50:54:00:00:00:01 && ip4.src == 192.168.0.2 \
+&& eth.dst == 00:00:00:00:ff:01 && ip4.dst == 11.0.0.2 \
+&& ip.ttl == 64'</code></pre>
+    <p>If <code>./ovn-setup.sh</code> says an object already exists, that is fine. You already created the topology in the previous lesson, so run only the <code>ovn-trace</code> command.</p>
+  </section>
+
+  <section class="card">
+    <h2>Expected Win</h2>
+    <p>The minimal trace should show these three logical actions:</p>
+    <pre><code>ip.ttl--;
+eth.src = 00:00:00:00:ff:02;
+eth.dst = 50:54:00:00:00:03;
+output("sw1-port1");</code></pre>
+    <p>Read that as: OVN routed the packet, rewrote the Ethernet header for the destination network, and chose <code>sw1-port1</code> as the logical output port.</p>
+  </section>
+
+  <section class="quiz" data-quiz>
+    <h2>Retrieval Check</h2>
+    <p>Answer from memory before peeking back at the trace.</p>
+
+    <div data-question data-correct="Hypothetical packet">
+      <p><strong>1.</strong> What does <code>ovn-trace</code> process?</p>
+      <button class="answer">Physical packet flow</button>
+      <button class="answer">Hypothetical packet</button>
+      <button class="answer">Interface counters</button>
+      <p class="feedback" aria-live="polite"></p>
+    </div>
+
+    <div data-question data-correct="Decremented TTL">
+      <p><strong>2.</strong> What does <code>ip.ttl--</code> tell you happened?</p>
+      <button class="answer">Dropped by ACLs</button>
+      <button class="answer">Broadcast to ports</button>
+      <button class="answer">Decremented TTL</button>
+      <p class="feedback" aria-live="polite"></p>
+    </div>
+
+    <div data-question data-correct="Logical output">
+      <p><strong>3.</strong> What does <code>output("sw1-port1")</code> identify?</p>
+      <button class="answer">Logical output</button>
+      <button class="answer">Kernel datapath</button>
+      <button class="answer">Northbound schema</button>
+      <p class="feedback" aria-live="polite"></p>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>What To Read</h2>
+    <p>Primary source: <a href="../ovn/Documentation/tutorials/ovn-sandbox.rst">OVN sandbox tutorial</a>, section “Using ovn-trace.” Keep the <a href="../reference/0002-ovn-trace-cheatsheet.html"><code>ovn-trace</code> cheatsheet</a> and <a href="../reference/0001-ovn-control-plane-map.html">control-plane map</a> nearby.</p>
+    <p>If your trace output differs, ask the agent to explain the exact output. That is usually a clue about which logical fields did or did not match.</p>
+  </section>
+</main>
+<script>
+  document.querySelectorAll('[data-question]').forEach((question) => {
+    const correct = question.dataset.correct;
+    const feedback = question.querySelector('.feedback');
+    question.querySelectorAll('button').forEach((button) => {
+      button.addEventListener('click', () => {
+        const ok = button.textContent.trim() === correct;
+        feedback.textContent = ok ? 'Correct. You read the logical trace action.' : 'Not yet. Re-read the expected trace, then try again.';
+        feedback.className = ok ? 'feedback correct' : 'feedback incorrect';
+      });
+    });
+  });
+</script>
+</body>
+</html>

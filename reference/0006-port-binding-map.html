@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Port Binding Map</title>
+  <link rel="stylesheet" href="../assets/course.css">
+</head>
+<body>
+<main>
+  <span class="tag">Reference</span>
+  <h1>Port Binding Map</h1>
+  <p class="subtitle">Use this when you need to map an OVN logical port to local OVS.</p>
+
+  <section class="card">
+    <h2>One-String Join</h2>
+    <pre><code>logical port name == Port_Binding.logical_port == Interface.external_ids:iface-id</code></pre>
+    <p>In the sandbox, <code>sw0-port1</code> is the logical name and <code>p1</code> is the local OVS interface that claims it.</p>
+  </section>
+
+  <section class="grid">
+    <div class="card">
+      <h2>1. Northbound</h2>
+      <p><code>ovn-nbctl lsp-list sw0</code></p>
+      <p><code>ovn-nbctl lsp-get-addresses sw0-port1</code></p>
+      <p>Shows the configured logical switch port and its MAC/IP addresses.</p>
+    </div>
+    <div class="card">
+      <h2>2. Southbound</h2>
+      <p><code>ovn-sbctl list port_binding sw0-port1</code></p>
+      <p>Shows the compiled binding row. Useful fields: <code>logical_port</code>, <code>chassis</code>, <code>mac</code>, <code>type</code>, and <code>up</code>.</p>
+    </div>
+    <div class="card">
+      <h2>3. Local OVS</h2>
+      <p><code>ovs-vsctl list Interface p1</code></p>
+      <p>Shows the local interface. The key field is <code>external_ids:iface-id</code>.</p>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>Sandbox Examples</h2>
+    <pre><code>p1 claims sw0-port1
+p2 claims sw1-port1</code></pre>
+    <p>These claims are created by <code>ovn/tutorial/ovn-setup.sh</code> with <code>ovs-vsctl add-port br-int ... external_ids:iface-id=...</code>.</p>
+  </section>
+
+  <section class="card">
+    <h2>Primary Sources</h2>
+    <p>Use local <a href="../ovn/ovn-sb.5"><code>ovn-sb.5</code></a> for <code>Port_Binding</code>, local <a href="../ovn/utilities/ovn-nbctl.8.xml"><code>ovn-nbctl.8</code></a> for logical switch port commands, and <a href="../ovn/tutorial/ovn-setup.sh"><code>ovn-setup.sh</code></a> for the sandbox's concrete bindings.</p>
+  </section>
+</main>
+</body>
+</html>

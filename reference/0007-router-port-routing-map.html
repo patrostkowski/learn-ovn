@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Reference 7: Router Port Routing Map</title>
+  <link rel="stylesheet" href="../assets/course.css">
+</head>
+<body>
+<main>
+  <span class="tag">Reference 7</span>
+  <h1>Router Port Routing Map</h1>
+  <p class="subtitle">A compact guide for reading directly connected routes in the OVN sandbox router.</p>
+
+  <section class="card">
+    <h2>Core Idea</h2>
+    <p>A logical router port is both an interface and a source of directly connected routes.</p>
+    <pre><code>lrp0: mac 00:00:00:00:ff:01, network 192.168.0.1/24
+  -> route destinations 192.168.0.x out lrp0
+
+lrp1: mac 00:00:00:00:ff:02, network 11.0.0.1/24
+  -> route destinations 11.0.0.x out lrp1</code></pre>
+  </section>
+
+  <section class="checkpoint">
+    <h2>Commands</h2>
+    <pre><code>ovn-nbctl lrp-list lr0
+ovn-nbctl list logical_router_port lrp0
+ovn-nbctl list logical_router_port lrp1
+ovn-nbctl lr-route-list lr0
+ovn-sbctl lflow-list lr0
+ovn-trace --minimal sw0 'inport == "sw0-port1" \
+&& eth.src == 50:54:00:00:00:01 && ip4.src == 192.168.0.2 \
+&& eth.dst == 00:00:00:00:ff:01 && ip4.dst == 11.0.0.2 \
+&& ip.ttl == 64'</code></pre>
+  </section>
+
+  <section class="card">
+    <h2>How To Read It</h2>
+    <div class="grid">
+      <div class="card"><h3>Input</h3><p>The packet enters router <code>lr0</code> from switch <code>sw0</code> through router port <code>lrp0</code>.</p></div>
+      <div class="card"><h3>Destination</h3><p><code>ip4.dst == 11.0.0.2</code> belongs to <code>11.0.0.0/24</code>, so the matching router port is <code>lrp1</code>.</p></div>
+      <div class="card"><h3>Rewrite</h3><p>The router decrements TTL, changes Ethernet source to <code>lrp1</code>'s MAC, and resolves the destination host MAC.</p></div>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>Route Kinds</h2>
+    <p>Connected routes come from router port networks. Static routes come from explicit <code>Logical_Router_Static_Route</code> rows, usually added with <code>ovn-nbctl lr-route-add</code>.</p>
+    <pre><code># connected route source
+ovn-nbctl lrp-add lr0 lrp1 00:00:00:00:ff:02 11.0.0.1/24
+
+# static route command shape
+ovn-nbctl lr-route-add ROUTER PREFIX NEXTHOP [PORT]</code></pre>
+  </section>
+
+  <section class="card">
+    <h2>Primary Sources</h2>
+    <p><a href="../ovn/ovn-nb.xml">ovn-nb.xml</a> documents <code>Logical_Router_Port.networks</code> and static route fields.</p>
+    <p><a href="../ovn/Documentation/ref/ovn-logical-flows.7.rst">ovn-logical-flows.7.rst</a> documents logical router IP routing flows.</p>
+    <p><a href="../ovn/utilities/ovn-nbctl.8.xml">ovn-nbctl.8.xml</a> documents <code>lrp-list</code>, <code>lr-route-add</code>, and <code>lr-route-list</code>.</p>
+  </section>
+
+  <p><a href="../lessons/0007-read-router-ports.html">Back to Lesson 7</a></p>
+</main>
+</body>
+</html>

@@ -1,0 +1,264 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Lesson 12: Who Binds A Port?</title>
+  <script>
+    (() => {
+      const saved = localStorage.getItem('ovn-course-theme');
+      const systemDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+      document.documentElement.dataset.theme = saved || (systemDark ? 'dark' : 'light');
+    })();
+  </script>
+  <link rel="stylesheet" href="../assets/course.css">
+  <style>
+    html[data-theme="dark"] { color-scheme: dark; --ink:#e5eef8; --muted:#9fb0c5; --paper:#07111f; --panel:#0d1b2d; --line:#23344b; --accent:#5eead4; --accent-soft:#123a3b; --code:#dbeafe; --code-bg:#172338; --ok:#86efac; --bad:#fca5a5; }
+    body { font-size: 18px; line-height: 1.65; }
+    main { max-width: 1120px; padding: 56px 28px 92px; }
+    .theme-row { display:flex; align-items:center; justify-content:space-between; gap:16px; margin:22px 0 32px; }
+    .theme-toggle { background:var(--panel); color:var(--ink); }
+    .copy-wrap { position:relative; }
+    .copy-button { position:absolute; top:10px; right:10px; background:var(--panel); color:var(--ink); }
+    .copy-wrap pre { padding-top:52px; }
+    .wide-table { width:100%; border-collapse:collapse; margin:16px 0; }
+    .wide-table th,.wide-table td { border-bottom:1px solid var(--line); padding:12px; text-align:left; vertical-align:top; }
+    .wide-table th { color:var(--muted); font-size:.9rem; }
+    .flow { display:grid; grid-template-columns:repeat(3,1fr); gap:14px; margin:20px 0; }
+    .flow .card { margin:0; }
+    .arrow { text-align:center; color:var(--accent); font-weight:800; font-size:1.4rem; }
+    .note { color:var(--muted); }
+    .command-notes { margin:14px 0 0; padding-left:22px; }
+    .command-notes li { margin:10px 0; }
+    .command-notes code:first-child { font-weight:700; }
+    .key { border-left:5px solid var(--accent); }
+    .warn { border-left:5px solid var(--bad); }
+    html[data-theme="dark"] pre { background:#020617; color:#dbeafe; border:1px solid var(--line); }
+    html[data-theme="dark"] .card, html[data-theme="dark"] .quiz, html[data-theme="dark"] .checkpoint { box-shadow:0 8px 22px rgba(0,0,0,.32); }
+    @media (max-width: 820px) { body{font-size:17px;} main{padding:36px 16px 72px;} .theme-row{align-items:flex-start; flex-direction:column;} .flow{grid-template-columns:1fr;} .wide-table,.wide-table thead,.wide-table tbody,.wide-table th,.wide-table td,.wide-table tr{display:block;} .wide-table thead{display:none;} .wide-table tr{border-bottom:1px solid var(--line); padding:10px 0;} .wide-table td{padding:8px 0;} }
+  </style>
+</head>
+<body>
+<main>
+  <span class="tag">Lesson 12</span>
+  <h1>Who Binds A Port?</h1>
+  <p class="subtitle">The Southbound DB does not tell OVS how to attach a port. The local <code>ovn-controller</code> discovers a local interface and writes the binding <em>back</em> into SB. This lesson fixes the direction of that arrow.</p>
+
+  <div class="theme-row">
+    <p class="subtitle">Theme follows your system preference until you switch it here.</p>
+    <button class="theme-toggle" type="button" data-theme-toggle aria-label="Toggle dark mode">Use dark mode</button>
+  </div>
+
+  <section class="card warn">
+    <h2>The Misconception To Kill</h2>
+    <p>“A port is created in SB with <code>iface-id=...</code> and then the controller programs itself.”</p>
+    <p><strong>No.</strong> <code>iface-id</code> is <strong>not</strong> a Southbound field. It never appears in the OVN SB schema. It lives only in the <strong>local OVSDB</strong> on each node, as <code>Interface.external_ids:iface-id</code>. The Southbound side of the join is a different field: <code>Port_Binding.logical_port</code>.</p>
+    <p>The controller does not read an instruction from SB telling it what to do. It watches its <em>own</em> local OVS for interfaces that carry an <code>iface-id</code>, then looks up the matching SB <code>Port_Binding</code> by <strong>name</strong> and stamps itself into it.</p>
+  </section>
+
+  <section class="card key">
+    <h2>The Two-Plane Contract</h2>
+    <p>The only shared agreement between the local node and the distributed DB is a <strong>string</strong>:</p>
+    <pre><code>OVS Interface.external_ids:iface-id   ==   SB Port_Binding.logical_port</code></pre>
+    <div class="flow">
+      <div class="card"><h3>SB writes: nothing</h3><p><code>Port_Binding{logical_port=who-port, chassis=[]}</code> is a <em>slot</em>. <code>ovn-northd</code> created it; it is empty until claimed.</p></div>
+      <div class="card"><h3>Local OVS speaks</h3><p>An interface appears with <code>external_ids:iface-id=who-port</code>. This is set on the node, by the node.</p></div>
+      <div class="card"><h3>Controller answers</h3><p><code>ovn-controller</code> matches by name, writes <code>chassis=&lt;itself&gt;</code>, programs OpenFlow on <code>br-int</code>.</p></div>
+    </div>
+    <p class="note">Direction: OVS → controller → SB. Not SB → OVS.</p>
+  </section>
+
+  <section class="card">
+    <h2>Who Writes What</h2>
+    <table class="wide-table">
+      <thead><tr><th>Field</th><th>Lives in</th><th>Written by</th><th>Meaning</th></tr></thead>
+      <tbody>
+        <tr><td><code>Logical_Switch_Port.name</code></td><td>NB DB</td><td>You / CMS (<code>ovn-nbctl</code>)</td><td>The logical port name (the join key).</td></tr>
+        <tr><td><code>Port_Binding.logical_port</code></td><td>SB DB</td><td><code>ovn-northd</code></td><td>Compiled copy of the name; the slot to fill.</td></tr>
+        <tr><td><code>Port_Binding.chassis</code></td><td>SB DB</td><td><code>ovn-controller</code></td><td>Which node claimed the port. Empty = unbound.</td></tr>
+        <tr><td><code>Interface.external_ids:iface-id</code></td><td>Local OVSDB</td><td>The node (CMS / agent / CNI)</td><td>The local claim: “I realize logical port <em>X</em>.”</td></tr>
+        <tr><td>OpenFlow on <code>br-int</code></td><td>Local OVS</td><td><code>ovn-controller</code></td><td>The datapath for that logical port’s <code>ofport</code>.</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section class="checkpoint">
+    <h2>Lab: Watch The Arrow Point The Right Way</h2>
+
+    <p><strong>Step 1 — create NB intent, then look at SB. No <code>iface-id</code> anywhere.</strong></p>
+    <pre data-copy><code>ovn-nbctl --wait=sb --may-exist ls-add who-ls
+ovn-nbctl --wait=sb --may-exist lsp-add who-ls who-port
+ovn-nbctl --wait=sb lsp-set-addresses who-port "50:54:00:00:40:10 10.40.0.10"
+ovn-sbctl --columns=logical_port,chassis,up list Port_Binding who-port
+ovn-sbctl list Port_Binding who-port | grep -i iface || echo "no iface-id in SB (expected)"</code></pre>
+    <ol class="command-notes">
+      <li>The <code>ls-add</code>/<code>lsp-add</code> commands write intent into NB; <code>--wait=sb</code> blocks until <code>ovn-northd</code> has compiled it.</li>
+      <li>The <code>Port_Binding</code> exists with <code>chassis=[]</code> — the slot, still empty.</li>
+      <li>The final <code>grep</code> proves the point: <code>iface-id</code> is not a Southbound concept. SB has <code>logical_port</code>.</li>
+    </ol>
+
+    <p><strong>Step 2 — the local node speaks. Add an OVS interface with the matching <code>iface-id</code>.</strong></p>
+    <pre data-copy><code>ovs-vsctl --may-exist add-port br-int who-if -- set Interface who-if external_ids:iface-id=who-port
+ovs-vsctl get Interface who-if external_ids</code></pre>
+    <ol class="command-notes">
+      <li><code>add-port br-int who-if</code> creates a local OVS port on the integration bridge.</li>
+      <li><code>external_ids:iface-id=who-port</code> is the claim: this local device realizes logical port <code>who-port</code>. Nothing in SB prompted this — you did it on the node.</li>
+    </ol>
+
+    <p><strong>Step 3 — the controller answers. Watch SB fill itself in.</strong></p>
+    <pre data-copy><code>ovn-sbctl --columns=logical_port,chassis,up list Port_Binding who-port
+ovn-sbctl show
+ovs-vsctl get Interface who-if external_ids</code></pre>
+    <ol class="command-notes">
+      <li><code>Port_Binding.chassis</code> should now be non-empty: <code>ovn-controller</code> wrote this node’s chassis UUID.</li>
+      <li><code>up: true</code> means the local interface is up.</li>
+      <li><code>Interface.external_ids</code> now also contains <code>ovn-installed="true"</code> — the controller’s acknowledgement that OpenFlow is programmed.</li>
+    </ol>
+    <p class="note">That is the whole mechanism: <strong>nobody told OVS to bind. OVS declared a local interface; the controller did the binding.</strong></p>
+  </section>
+
+  <section class="checkpoint">
+    <h2>The Manual Override (And Why It Is Rare)</h2>
+    <p><code>ovn-sbctl</code> can force a binding for ports that have <em>no</em> local interface. This is a debug/edge tool, not the normal path.</p>
+    <pre data-copy><code>ovn-sbctl lsp-unbind who-port
+ovn-sbctl --columns=logical_port,chassis list Port_Binding who-port
+ovn-sbctl lsp-bind who-port chassis-1
+ovn-sbctl --columns=logical_port,chassis list Port_Binding who-port</code></pre>
+    <ol class="command-notes">
+      <li><code>lsp-unbind who-port</code> resets the binding to empty.</li>
+      <li><code>lsp-bind who-port chassis-1</code> forces the port onto chassis <code>chassis-1</code> by hand.</li>
+      <li>Because a real OVS interface still carries <code>iface-id=who-port</code>, <code>ovn-controller</code> will reclaim the binding shortly. Manual bind only “sticks” when no local interface competes for it.</li>
+    </ol>
+    <p class="note">One legitimate CMS hint does exist: <code>Port_Binding.requested-chassis</code> (and <code>additional_chassis</code>). The CMS can <em>request</em> placement — used for SR-IOV, direct/baremetal ports, and live migration — but the controller still performs the bind. Absent that hint, placement is entirely the controller’s decision.</p>
+  </section>
+
+  <section class="card">
+    <h2>How OpenStack Does Exactly This</h2>
+    <p>OpenStack has the same separation of duties; only the names of the actors differ.</p>
+    <div class="flow">
+      <div class="card"><h3>1. API / Neutron DB</h3><p><code>openstack port create</code> makes a Neutron port with UUID <code>P</code>. No OVN object yet.</p></div>
+      <div class="card"><h3>2. NB (intent)</h3><p>The ML2/OVN driver writes a <code>Logical_Switch_Port</code> named <code>P</code> (Neutron uses the port UUID as the logical port name).</p></div>
+      <div class="card"><h3>3. SB (compiled)</h3><p><code>ovn-northd</code> creates <code>Port_Binding{logical_port=P, chassis=[]}</code>. Still a slot.</p></div>
+    </div>
+    <div class="flow">
+      <div class="card"><h3>4. Compute plugs the vif</h3><p>Nova, on the target compute, creates the tap/veth and sets <code>external_ids:iface-id=P</code> on the OVS interface. <em>This is the local claim.</em></p></div>
+      <div class="card"><h3>5. Controller binds</h3><p><code>ovn-controller</code> on that compute matches <code>iface-id=P</code> to <code>logical_port=P</code>, writes <code>chassis=&lt;compute&gt;</code>, programs OpenFlow.</p></div>
+      <div class="card"><h3>Result</h3><p>Port is “bound” and traffic flows. SB now records which compute owns the port.</p></div>
+    </div>
+    <p><strong>So the answer to “does SB tell the controller to create a binding?” is no.</strong> SB provides the logical port (a slot). The trigger to bind is a <em>local interface appearing</em>, created by the compute-side agent (Nova + os-vif, or a CNI). The controller then writes the binding back into SB.</p>
+    <table class="wide-table">
+      <thead><tr><th>Role</th><th>OVN generic</th><th>OpenStack</th><th>Kubernetes (Kube-OVN/OVN-K)</th></tr></thead>
+      <tbody>
+        <tr><td>Creates logical port (NB)</td><td>CMS via <code>ovn-nbctl</code></td><td>Neutron ML2/OVN</td><td>the CNI / controller</td></tr>
+        <tr><td>Compiles slot (SB)</td><td><code>ovn-northd</code></td><td><code>ovn-northd</code></td><td><code>ovn-northd</code></td></tr>
+        <tr><td>Sets <code>iface-id</code> locally</td><td>the node operator / CNI</td><td>Nova on the compute</td><td>the CNI plugin</td></tr>
+        <tr><td>Writes <code>chassis</code></td><td><code>ovn-controller</code></td><td><code>ovn-controller</code></td><td><code>ovn-controller</code></td></tr>
+      </tbody>
+    </table>
+    <p class="note">In your <code>kubesdn</code> project this is exactly why the CNI sets <code>external_ids:iface-id=&lt;ns&gt;-&lt;pod&gt;</code> on the host veth and the controller-owned <code>ovn-controller</code> does the binding — the CNI never “asks” SB to bind anything.</p>
+  </section>
+
+  <section class="checkpoint">
+    <h2>Cleanup</h2>
+    <pre data-copy><code>ovs-vsctl --if-exists del-port br-int who-if
+ovn-nbctl --if-exists ls-del who-ls</code></pre>
+    <ol class="command-notes">
+      <li>Removing the local OVS port releases the claim; the binding will fall back to unbound.</li>
+      <li>Deleting the logical switch removes the NB intent, and <code>ovn-northd</code> removes the SB rows.</li>
+    </ol>
+  </section>
+
+  <section class="quiz" data-quiz>
+    <h2>Retrieval Check</h2>
+    <p>Answer from memory before looking back.</p>
+    <div class="question" data-answer="Local OVS database">
+      <p>Where does <code>iface-id</code> actually live?</p>
+      <button>Southbound Port_Binding</button><button>Local OVS database</button><button>Northbound logical port</button>
+    </div>
+    <div class="question" data-answer="ovn-controller binds it">
+      <p>Who writes the <code>chassis</code> field into <code>Port_Binding</code>?</p>
+      <button>ovn-northd compiles rows</button><button>ovn-nbctl writes it</button><button>ovn-controller binds it</button>
+    </div>
+    <div class="question" data-answer="Nova plugs the vif">
+      <p>In OpenStack, what sets <code>iface-id</code> on the local tap?</p>
+      <button>Neutron writes the row</button><button>Nova plugs the vif</button><button>northd sets the field</button>
+    </div>
+    <div class="question" data-answer="requested-chassis column">
+      <p>Which SB field lets the CMS <em>hint</em> a target chassis?</p>
+      <button>requested-chassis column</button><button>logical_port column</button><button>install_lb option</button>
+    </div>
+    <p class="result" aria-live="polite"></p>
+  </section>
+
+  <section class="card">
+    <h2>Primary Sources</h2>
+    <ul>
+      <li><a href="../ovn/controller/ovn-controller.8.xml"><code>ovn-controller.8.xml</code></a>: the local controller writes <code>Chassis</code>, <code>Encap</code>, and <code>Port_Binding</code>.</li>
+      <li><a href="../ovn/ovn-sb.5"><code>ovn-sb.5</code></a>: <code>Port_Binding</code> columns, including <code>logical_port</code>, <code>chassis</code>, and <code>requested-chassis</code>.</li>
+      <li><a href="../ovn/ovs/vswitchd/ovs-vswitchd.conf.db.5"><code>ovs-vswitchd.conf.db.5</code></a>: the OVS <code>Interface.external_ids</code> map where <code>iface-id</code> lives.</li>
+      <li><a href="../ovn/Documentation/topics/vif-plug-providers/vif-plug-providers.rst">VIF plug providers</a>: how the compute side sets <code>iface-id</code>.</li>
+    </ul>
+    <p class="note">Ask your agent-teacher to trace any specific port across NB, SB, and OVS in your own sandbox.</p>
+  </section>
+
+  <p>
+    <a href="0011-nb-sb-ovs-port-binding.html">&larr; Lesson 11</a> &middot;
+    <a href="0013-port-binding-lab.html">Lesson 13: Port Binding Lab &rarr;</a> &middot;
+    <a href="../reference/0006-port-binding-map.html">Port Binding Map</a> &middot;
+    <a href="../reference/0009-ovs-bridge-port-interface.html">Bridge / Port / Interface</a> &middot;
+    <a href="../reference/0008-ovn-table-map.html">OVN Table Map</a> &middot;
+    <a href="0000-ovn-from-scratch.html">Course home</a>
+  </p>
+</main>
+
+<script>
+  document.querySelectorAll('pre[data-copy]').forEach((pre) => {
+    const wrap = document.createElement('div');
+    wrap.className = 'copy-wrap';
+    pre.parentNode.insertBefore(wrap, pre);
+    wrap.appendChild(pre);
+    const button = document.createElement('button');
+    button.className = 'copy-button';
+    button.type = 'button';
+    button.textContent = 'Copy to pastebin';
+    wrap.appendChild(button);
+    button.addEventListener('click', async () => {
+      try {
+        await navigator.clipboard.writeText(pre.textContent.trim());
+        button.textContent = 'Copied';
+        setTimeout(() => { button.textContent = 'Copy to pastebin'; }, 1200);
+      } catch (error) {
+        button.textContent = 'Select manually';
+      }
+    });
+  });
+
+  const themeButton = document.querySelector('[data-theme-toggle]');
+  const updateThemeButton = () => {
+    const isDark = document.documentElement.dataset.theme === 'dark';
+    themeButton.textContent = isDark ? 'Use light mode' : 'Use dark mode';
+    themeButton.setAttribute('aria-pressed', String(isDark));
+  };
+  themeButton.addEventListener('click', () => {
+    const next = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark';
+    document.documentElement.dataset.theme = next;
+    localStorage.setItem('ovn-course-theme', next);
+    updateThemeButton();
+  });
+  updateThemeButton();
+
+  document.querySelectorAll('[data-quiz]').forEach((quiz) => {
+    const result = quiz.querySelector('.result');
+    quiz.querySelectorAll('.question').forEach((question) => {
+      question.querySelectorAll('button').forEach((button) => {
+        button.addEventListener('click', () => {
+          const ok = button.textContent.trim() === question.dataset.answer;
+          question.dataset.state = ok ? 'correct' : 'wrong';
+          result.textContent = ok ? 'Correct. The node declares, the controller binds.' : 'Not quite. iface-id is local OVS; the controller writes chassis into SB.';
+        });
+      });
+    });
+  });
+</script>
+</body>
+</html>

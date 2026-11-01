@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Lesson 3: Read A Logical Flow</title>
+  <link rel="stylesheet" href="../assets/course.css">
+</head>
+<body>
+<main>
+  <span class="tag">Lesson 3</span>
+  <h1>Read A Logical Flow</h1>
+  <p class="subtitle">Your next OVN skill: read the Southbound rules that <code>ovn-trace</code> is walking through.</p>
+
+  <section class="card">
+    <h2>The Model</h2>
+    <p><code>ovn-northd</code> compiles Northbound intent into Southbound logical flows. <code>ovn-trace</code> follows those flows for a hypothetical packet.</p>
+    <p>A logical flow is just a match-action rule with ordering:</p>
+    <pre><code>table=0 (...), priority=50, match=(...), action=(next;)</code></pre>
+    <div class="grid">
+      <div class="card"><h3>Where?</h3><p><code>table</code> tells you the pipeline stage.</p></div>
+      <div class="card"><h3>Which one?</h3><p><code>priority</code> decides among matching flows.</p></div>
+      <div class="card"><h3>For what?</h3><p><code>match</code> describes the packet fields.</p></div>
+      <div class="card"><h3>Do what?</h3><p><code>action</code> tells OVN to continue, drop, rewrite, or output.</p></div>
+    </div>
+  </section>
+
+  <section class="checkpoint">
+    <h2>Sandbox Exercise</h2>
+    <p>In your running sandbox shell, list the logical flows for the first switch and router. The output is long; your task is only to classify lines.</p>
+    <pre><code>ovn-sbctl lflow-list sw0
+
+ovn-sbctl lflow-list lr0</code></pre>
+    <p>Now pick one line from the output and rewrite it in this four-part form:</p>
+    <pre><code>table:    ____
+priority: ____
+match:    ____
+action:   ____</code></pre>
+  </section>
+
+  <section class="card">
+    <h2>What To Notice</h2>
+    <p>On <code>sw0</code>, many table names start with <code>ls_</code>. Read that as logical switch. On <code>lr0</code>, many table names start with <code>lr_</code>. Read that as logical router.</p>
+    <p>This is why Lesson 2's trace had router-looking actions such as <code>ip.ttl--</code> and Ethernet rewrites: the packet left a logical switch pipeline, crossed the router pipeline, then entered another logical switch pipeline.</p>
+  </section>
+
+  <section class="quiz" data-quiz>
+    <h2>Retrieval Check</h2>
+    <p>Answer from memory before peeking back at the model.</p>
+
+    <div data-question data-correct="Pipeline stage">
+      <p><strong>1.</strong> In a logical flow, what does <code>table</code> identify?</p>
+      <button class="answer">Packet source</button>
+      <button class="answer">Pipeline stage</button>
+      <button class="answer">Chassis name</button>
+      <p class="feedback" aria-live="polite"></p>
+    </div>
+
+    <div data-question data-correct="Highest number">
+      <p><strong>2.</strong> If several flows match in one table, which priority wins?</p>
+      <button class="answer">First printed</button>
+      <button class="answer">Lowest number</button>
+      <button class="answer">Highest number</button>
+      <p class="feedback" aria-live="polite"></p>
+    </div>
+
+    <div data-question data-correct="Southbound DB">
+      <p><strong>3.</strong> Where does <code>ovn-sbctl lflow-list</code> read logical flows from?</p>
+      <button class="answer">Southbound DB</button>
+      <button class="answer">Northbound DB</button>
+      <button class="answer">Linux kernel</button>
+      <p class="feedback" aria-live="polite"></p>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>What To Read</h2>
+    <p>Primary source: <a href="../ovn/Documentation/ref/ovn-logical-flows.7.rst">local <code>ovn-logical-flows.7.rst</code></a>. Keep the <a href="../reference/0003-logical-flow-reading-guide.html">logical-flow reading guide</a> open as the short version.</p>
+    <p>If a flow line is confusing, paste that exact line to the agent and ask: “Which packet would this match, and what would the action do?”</p>
+  </section>
+</main>
+<script>
+  document.querySelectorAll('[data-question]').forEach((question) => {
+    const correct = question.dataset.correct;
+    const feedback = question.querySelector('.feedback');
+    question.querySelectorAll('button').forEach((button) => {
+      button.addEventListener('click', () => {
+        const ok = button.textContent.trim() === correct;
+        feedback.textContent = ok ? 'Correct. You can parse a logical flow field.' : 'Not yet. Re-read the four-part flow shape, then try again.';
+        feedback.className = ok ? 'feedback correct' : 'feedback incorrect';
+      });
+    });
+  });
+</script>
+</body>
+</html>

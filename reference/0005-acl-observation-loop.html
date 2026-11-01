@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ACL Observation Loop</title>
+  <link rel="stylesheet" href="../assets/course.css">
+</head>
+<body>
+<main>
+  <span class="tag">Reference</span>
+  <h1>ACL Observation Loop</h1>
+  <p class="subtitle">Use this when you change OVN policy and want to prove where the change landed.</p>
+
+  <section class="card">
+    <h2>Repeatable ACL</h2>
+    <pre><code>ovn-nbctl --wait=sb --may-exist acl-add sw0 from-lport 1001 \
+  'inport == "sw0-port1" &amp;&amp; ip4.dst == 11.0.0.2' drop
+
+ovn-nbctl --wait=sb acl-del sw0 from-lport 1001 \
+  'inport == "sw0-port1" &amp;&amp; ip4.dst == 11.0.0.2'</code></pre>
+    <p><code>--may-exist</code> makes the add safe to repeat. <code>--wait=sb</code> waits until <code>ovn-northd</code> has updated the Southbound DB.</p>
+  </section>
+
+  <section class="grid">
+    <div class="card">
+      <h2>1. NB Intent</h2>
+      <p><code>ovn-nbctl acl-list sw0</code></p>
+      <p>Look for direction <code>from-lport</code>, priority <code>1001</code>, match <code>inport == "sw0-port1" &amp;&amp; ip4.dst == 11.0.0.2</code>, and action <code>drop</code>.</p>
+    </div>
+    <div class="card">
+      <h2>2. SB Compile</h2>
+      <p><code>ovn-sbctl lflow-list sw0</code></p>
+      <p>Look for ACL-related tables. For <code>from-lport</code>, the ingress ACL evaluation table sets verdict bits, then the ACL action table performs <code>drop;</code>.</p>
+    </div>
+    <div class="card">
+      <h2>3. Trace Result</h2>
+      <p><code>ovn-trace --ct new --minimal sw0 '...'</code></p>
+      <p>A successful drop trace does not end with the destination <code>output("sw1-port1")</code> from Lesson 2.</p>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>Command Shape</h2>
+    <pre><code>acl-add ENTITY DIRECTION PRIORITY MATCH VERDICT
+acl-del ENTITY DIRECTION PRIORITY MATCH</code></pre>
+    <p><code>ENTITY</code> is a logical switch or port group. <code>DIRECTION</code> is <code>from-lport</code> or <code>to-lport</code>. <code>PRIORITY</code> is higher-wins, within the ACL priority range.</p>
+  </section>
+
+  <section class="card">
+    <h2>Primary Sources</h2>
+    <p>Use local <a href="../ovn/utilities/ovn-nbctl.8.xml"><code>ovn-nbctl.8</code></a> for command syntax and local <a href="../ovn/Documentation/ref/ovn-logical-flows.7.rst"><code>ovn-logical-flows.7</code></a> for the ACL logical pipeline.</p>
+  </section>
+</main>
+</body>
+</html>

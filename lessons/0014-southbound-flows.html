@@ -1,0 +1,311 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Lesson 14: Southbound Flows After Compilation</title>
+  <script>
+    (() => {
+      const saved = localStorage.getItem('ovn-course-theme');
+      const systemDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+      document.documentElement.dataset.theme = saved || (systemDark ? 'dark' : 'light');
+    })();
+  </script>
+  <link rel="stylesheet" href="../assets/course.css">
+  <style>
+    html[data-theme="dark"] { color-scheme: dark; --ink:#e5eef8; --muted:#9fb0c5; --paper:#07111f; --panel:#0d1b2d; --line:#23344b; --accent:#5eead4; --accent-soft:#123a3b; --code:#dbeafe; --code-bg:#172338; --ok:#86efac; --bad:#fca5a5; }
+    body { font-size: 18px; line-height: 1.65; }
+    main { max-width: 1160px; padding: 56px 28px 92px; }
+    .theme-row { display:flex; align-items:center; justify-content:space-between; gap:16px; margin:22px 0 32px; }
+    .theme-toggle { background:var(--panel); color:var(--ink); }
+    .copy-wrap { position:relative; }
+    .copy-button { position:absolute; top:10px; right:10px; background:var(--panel); color:var(--ink); }
+    .copy-wrap pre { padding-top:52px; }
+    .wide-table { width:100%; border-collapse:collapse; margin:16px 0; font-size:.94rem; }
+    .wide-table th,.wide-table td { border-bottom:1px solid var(--line); padding:9px 10px; text-align:left; vertical-align:top; }
+    .wide-table th { color:var(--muted); font-size:.85rem; }
+    .wide-table td:first-child { white-space:nowrap; font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; color:var(--accent); }
+    .flow { display:grid; grid-template-columns:repeat(5,1fr); gap:10px; margin:20px 0; }
+    .flow .card { margin:0; padding:14px; }
+    .note { color:var(--muted); }
+    .command-notes { margin:14px 0 0; padding-left:22px; }
+    .command-notes li { margin:10px 0; }
+    .command-notes code:first-child { font-weight:700; }
+    .key { border-left:5px solid var(--accent); }
+    .hot { background:var(--accent-soft); }
+    html[data-theme="dark"] .hot { background:#0b2b2b; }
+    html[data-theme="dark"] pre { background:#020617; color:#dbeafe; border:1px solid var(--line); }
+    html[data-theme="dark"] .card, html[data-theme="dark"] .quiz, html[data-theme="dark"] .checkpoint { box-shadow:0 8px 22px rgba(0,0,0,.32); }
+    @media (max-width: 900px) { body{font-size:17px;} main{padding:36px 16px 72px;} .theme-row{align-items:flex-start; flex-direction:column;} .flow{grid-template-columns:1fr 1fr;} .wide-table,.wide-table thead,.wide-table tbody,.wide-table th,.wide-table td,.wide-table tr{display:block;} .wide-table thead{display:none;} .wide-table tr{border-bottom:1px solid var(--line); padding:10px 0;} .wide-table td{padding:6px 0;} }
+  </style>
+</head>
+<body>
+<main>
+  <span class="tag">Lesson 14</span>
+  <h1>Southbound Flows After Compilation</h1>
+  <p class="subtitle">Once <code>ovn-northd</code> compiles your NB intent it lands in the SB <code>Logical_Flow</code> table. This lesson shows what those rows are, how to look them up, and which ones you will meet again and again.</p>
+
+  <div class="theme-row">
+    <p class="subtitle">Theme follows your system preference until you switch it here.</p>
+    <button class="theme-toggle" type="button" data-theme-toggle aria-label="Toggle dark mode">Use dark mode</button>
+  </div>
+
+  <section class="card key">
+    <h2>The One Big Idea</h2>
+    <p>A SB <code>Logical_Flow</code> row is one rule in one pipeline table of one logical datapath. It is the compiled form of NB intent, not the intent itself. You never write these rows by hand; <code>ovn-northd</code> generates them, and <code>ovn-controller</code> translates the relevant ones into OpenFlow on <code>br-int</code>.</p>
+    <div class="flow">
+      <div class="card"><h3>NB</h3><p>Logical switch/router, ports, ACLs, NAT (intent)</p></div>
+      <div class="card"><h3>northd</h3><p>compiles</p></div>
+      <div class="card"><h3>SB</h3><p><code>Logical_Flow</code> rows per datapath (the pipeline)</p></div>
+      <div class="card"><h3>ovn-controller</h3><p>translates local flows</p></div>
+      <div class="card"><h3>OpenFlow</h3><p>on <code>br-int</code> (the datapath)</p></div>
+    </div>
+    <p>A single row is: <strong>{datapath, pipeline, table, priority, match, actions}</strong>. Evaluation: enter at table 0, find true matches, the <strong>highest priority</strong> wins, run its actions; <code>next</code> advances to the next table, <code>output</code> delivers the packet.</p>
+  </section>
+
+  <section class="card">
+    <h2>What "Compiled" Actually Means</h2>
+    <p>You already know NB is a graph of logical objects. <code>ovn-northd</code> walks that graph and emits, for each datapath, a fixed sequence of numbered tables (the pipeline). Each rule becomes a <code>Logical_Flow</code> row. The row's stage name is stored by northd in <code>external_ids["stage-name"]</code>, which is the parenthetical you see in <code>ovn-sbctl lflow-list</code> output: <code>table=9 (ls_in_acl_eval)</code>.</p>
+    <table class="wide-table">
+      <thead><tr><th>Column</th><th>Meaning</th></tr></thead>
+      <tbody>
+        <tr><td>logical_datapath</td><td>Which logical switch or router this flow belongs to (or <code>logical_dp_group</code> for a group).</td></tr>
+        <tr><td>pipeline</td><td><code>ingress</code> or <code>egress</code>.</td></tr>
+        <tr><td>table_id</td><td>The table number inside that pipeline (0..34 for switches, 0..28 for routers).</td></tr>
+        <tr><td>priority</td><td>Higher wins when several rules match (0..65535).</td></tr>
+        <tr><td>match</td><td>The condition, in OVN logical-field syntax (<code>inport</code>, <code>eth.dst</code>, <code>ip4.src</code>, <code>reg0[2]</code>, <code>ct.new</code>, <code>is_chassis_resident(...)</code>, ...).</td></tr>
+        <tr><td>actions</td><td>What to do: set fields, <code>next;</code>, <code>output(...)</code>, <code>ct_lb_mark(...)</code>, <code>ct_snat(...)</code>, <code>drop;</code>.</td></tr>
+        <tr><td>external_ids</td><td>Includes <code>stage-name</code> (the human table name) and often <code>stage-hint</code>.</td></tr>
+        <tr><td>tags / flow_desc / controller_meter</td><td>Metadata, descriptions, and logging meters.</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section class="checkpoint">
+    <h2>How To Look Them Up</h2>
+    <pre data-copy><code># all flows for one datapath (by name)
+ovn-sbctl lflow-list sw0
+ovn-sbctl lflow-list lr0
+
+# every flow in the DB
+ovn-sbctl lflow-list
+
+# how many flows per table / datapath
+ovn-sbctl count-flows sw0
+
+# include the first 32 bits of each flow UUID (matches OpenFlow cookie)
+ovn-sbctl --uuid lflow-list sw0
+
+# show the local OpenFlow generated from each logical flow
+ovn-sbctl --ovs lflow-list sw0
+ovn-sbctl --ovs --stats lflow-list lr0
+
+# also dump the SB records the flows are derived from (ports, MACs, LBs)
+ovn-sbctl --vflows lflow-list sw0
+
+# find one flow by UUID (e.g. recovered from an OpenFlow cookie)
+ovn-sbctl lflow-list sw0 5c234a70</code></pre>
+    <ol class="command-notes">
+      <li><code>lflow-list DATAPATH</code> filters to one logical datapath; the datapath can be a name or UUID.</li>
+      <li><code>--uuid</code> prints the first 32 bits of the flow UUID, which <code>ovn-controller</code> sets as the OpenFlow <em>cookie</em> — that is how you jump from a local OpenFlow row back to its logical flow.</li>
+      <li><code>--ovs</code> connects to <code>br-int</code> and prints the OpenFlow underneath each logical flow. Useful only for flows that are actually installed locally.</li>
+      <li>Filter with grep to isolate a stage: <code>ovn-sbctl lflow-list sw0 | grep ls_in_acl</code>.</li>
+    </ol>
+    <p class="note">Companion tools: <code>ovn-trace</code> simulates a packet through these flows, and <code>ovn-detrace</code> maps a flow back to the NB object that produced it.</p>
+  </section>
+
+  <section class="card">
+    <h2>Reading One Line</h2>
+    <pre><code>table=9 (ls_in_acl_eval), priority=2001, match=(outport == @pg-web &amp;&amp; ip4 &amp;&amp; tcp &amp;&amp; tcp.dst == 80), action=(next;)</code></pre>
+    <ol class="command-notes">
+      <li><code>table=9</code> + <code>(ls_in_acl_eval)</code> — ingress ACL evaluation on a logical switch (the parenthetical is <code>external_ids["stage-name"]</code>).</li>
+      <li><code>priority=2001</code> — beats a default-deny at 2000. Higher number wins.</li>
+      <li><code>match=(...)</code> — destination port group <code>@pg-web</code>, IPv4, TCP, dport 80.</li>
+      <li><code>action=(next;)</code> — continue to the next table (traffic allowed to proceed).</li>
+    </ol>
+  </section>
+
+  <section class="card">
+    <h2>The Stages You Will Actually Meet</h2>
+    <p>These are the table names northd registers (from <code>northd.h</code>). Learn the bolded ones first — they explain 90% of what you debug.</p>
+
+    <h3>Logical switch — ingress (packet enters from a port)</h3>
+    <table class="wide-table">
+      <thead><tr><th>Table</th><th>Stage</th><th>What it does</th></tr></thead>
+      <tbody>
+        <tr><td>0</td><td>ls_in_check_port_sec</td><td>Start here. Drop malformed/VLAN/multicast-source; begin port-security.</td></tr>
+        <tr><td>1</td><td>ls_in_apply_port_sec</td><td>Apply port security (allowed MAC/IP per port).</td></tr>
+        <tr><td>5</td><td>ls_in_pre_acl</td><td class="hot">Pre-ACL classification; decides whether traffic is stateful.</td></tr>
+        <tr><td>6</td><td>ls_in_pre_lb</td><td>Marks traffic for load balancing; sets the LB enable bit.</td></tr>
+        <tr><td>7</td><td class="hot">ls_in_pre_stateful</td><td>Sets up conntrack (DNAT/SNAT) before stateful stages.</td></tr>
+        <tr><td>9</td><td class="hot">ls_in_acl_eval</td><td><strong>ACL evaluation — where SecurityGroups / NetworkPolicy compile.</strong></td></tr>
+        <tr><td>15</td><td class="hot">ls_in_lb</td><td>Load-balancer DNAT of VIP traffic (<code>ct_lb_mark</code>).</td></tr>
+        <tr><td>24</td><td class="hot">ls_in_stateful</td><td>Commit conntrack / handle stateful ACLs.</td></tr>
+        <tr><td>27</td><td class="hot">ls_in_arp_rsp</td><td>Answer ARP/ND for router-owned addresses.</td></tr>
+        <tr><td>28/29</td><td>ls_in_dhcp_options / _response</td><td>DHCP respond when a port has DHCP options.</td></tr>
+        <tr><td>30/31</td><td>ls_in_dns_lookup / _response</td><td>DNS responder for the switch.</td></tr>
+        <tr><td>33</td><td class="hot">ls_in_l2_lkup</td><td><strong>L2 lookup / delivery decision — where <code>output(...)</code> fires.</strong></td></tr>
+        <tr><td>34</td><td>ls_in_l2_unknown</td><td>Flood unknown unicast/broadcast (or drop).</td></tr>
+      </tbody>
+    </table>
+
+    <h3>Logical switch — egress (packet leaves toward a port)</h3>
+    <table class="wide-table">
+      <thead><tr><th>Table</th><th>Stage</th><th>What it does</th></tr></thead>
+      <tbody>
+        <tr><td>2</td><td>ls_out_pre_acl</td><td>Egress pre-classification.</td></tr>
+        <tr><td>6</td><td class="hot">ls_out_acl_eval</td><td><strong>Egress ACL evaluation.</strong></td></tr>
+        <tr><td>12</td><td class="hot">ls_out_stateful</td><td>Commit conntrack for egress.</td></tr>
+        <tr><td>14/15</td><td>ls_out_check/apply_port_sec</td><td>Port security on the way out.</td></tr>
+      </tbody>
+    </table>
+
+    <h3>Logical router — ingress (packet enters the router)</h3>
+    <table class="wide-table">
+      <thead><tr><th>Table</th><th>Stage</th><th>What it does</th></tr></thead>
+      <tbody>
+        <tr><td>0</td><td>lr_in_admission</td><td>Start here. Validate the ingress port and L2/L3.</td></tr>
+        <tr><td>3</td><td class="hot">lr_in_ip_input</td><td><strong>Control plane: ARP, ND, ICMP to the router, TTL=0/1, TTL drop, IP options.</strong></td></tr>
+        <tr><td>5</td><td class="hot">lr_in_unsnat</td><td>Reverse SNAT for return traffic (<code>ct_snat;</code>).</td></tr>
+        <tr><td>10</td><td class="hot">lr_in_dnat</td><td><strong>DNAT / load-balancer VIP on the router.</strong></td></tr>
+        <tr><td>16</td><td class="hot">lr_in_ip_routing</td><td><strong>Routing decision — picks the outport from routes.</strong></td></tr>
+        <tr><td>18</td><td>lr_in_policy</td><td>Policy-based routing rules.</td></tr>
+        <tr><td>22</td><td class="hot">lr_in_arp_resolve</td><td><strong>Resolve next-hop MAC, rewrite <code>eth.src/eth.dst</code>.</strong></td></tr>
+        <tr><td>25</td><td class="hot">lr_in_gw_redirect</td><td><strong>Distributed gateway: send north-south traffic to the gateway chassis.</strong></td></tr>
+        <tr><td>27</td><td>lr_in_arp_request</td><td>Emit ARP requests for unresolved neighbors.</td></tr>
+      </tbody>
+    </table>
+
+    <h3>Logical router — egress (packet leaves the router)</h3>
+    <table class="wide-table">
+      <thead><tr><th>Table</th><th>Stage</th><th>What it does</th></tr></thead>
+      <tbody>
+        <tr><td>1</td><td>lr_out_undnat</td><td>Reverse DNAT (return path of a VIP).</td></tr>
+        <tr><td>3</td><td class="hot">lr_out_snat</td><td><strong>SNAT / egress NAT (<code>ct_snat(EXTERNAL_IP)</code>).</strong></td></tr>
+        <tr><td>6</td><td class="hot">lr_out_delivery</td><td>Deliver the frame toward the resolved port.</td></tr>
+      </tbody>
+    </table>
+    <p class="note">Exact table numbers can shift between OVN versions. Trust the <code>stage-name</code> in parentheses, not the number, when reading output.</p>
+  </section>
+
+  <section class="checkpoint">
+    <h2>Lab: Tour The Compiled Pipeline</h2>
+    <pre data-copy><code>./ovn-setup.sh
+
+# see the whole switch pipeline start to finish
+ovn-sbctl lflow-list sw0
+
+# how many flows live in each table
+ovn-sbctl count-flows sw0
+
+# isolate the interesting stages
+ovn-sbctl lflow-list sw0 | grep -E "ls_in_(check_port_sec|pre_acl|acl_eval|l2_lkup)"
+
+# the router pipeline
+ovn-sbctl lflow-list lr0 | grep -E "lr_in_(ip_input|ip_routing|arp_resolve)"
+
+# jump from a logical flow to its OpenFlow
+ovn-sbctl --uuid lflow-list sw0
+ovn-sbctl --ovs lflow-list sw0</code></pre>
+    <ol class="command-notes">
+      <li><code>lflow-list sw0</code> prints every table in order — this is the compiled switch pipeline.</li>
+      <li><code>count-flows</code> is the fastest way to see how much is in each table (and whether a feature is absent because it produced no rows).</li>
+      <li>The greps show the tables responsible for port security, ACLs, delivery, routing, and neighbor resolution.</li>
+      <li><code>--uuid</code> + <code>--ovs</code> connect the logical rows to the OpenFlow <code>ovn-controller</code> installed on <code>br-int</code>.</li>
+    </ol>
+    <p class="note">Then simulate with <code>ovn-trace --minimal sw0 'inport == "sw0-port1" &amp;&amp; ...'</code> and match each trace step to a table above. See <a href="../reference/0002-ovn-trace-cheatsheet.html">Reference 2</a>.</p>
+  </section>
+
+  <section class="quiz" data-quiz>
+    <h2>Retrieval Check</h2>
+    <p>Answer from memory before looking back.</p>
+    <div class="question" data-answer="ovn-northd writes them">
+      <p>Who writes the <code>Logical_Flow</code> rows into SB?</p>
+      <button>ovn-controller installs them</button><button>ovn-northd writes them</button><button>the operator writes them</button>
+    </div>
+    <div class="question" data-answer="highest priority wins">
+      <p>When multiple logical flows match, which one applies?</p>
+      <button>lowest table wins</button><button>first row listed wins</button><button>highest priority wins</button>
+    </div>
+    <div class="question" data-answer="where output fires">
+      <p>What is <code>ls_in_l2_lkup</code> responsible for?</p>
+      <button>where output fires</button><button>where ACLs evaluate</button><button>where ARP is answered</button>
+    </div>
+    <div class="question" data-answer="stage-name in external_ids">
+      <p>Where does the parenthetical table name come from?</p>
+      <button>the table_id number</button><button>stage-name in external_ids</button><button>the flow UUID</button>
+    </div>
+    <p class="result" aria-live="polite"></p>
+  </section>
+
+  <section class="card">
+    <h2>Primary Sources</h2>
+    <ul>
+      <li><a href="../ovn/Documentation/ref/ovn-logical-flows.7.rst"><code>ovn-logical-flows.7.rst</code></a> &mdash; the definitive description of every stage.</li>
+      <li><a href="../ovn/northd/northd.h"><code>northd.h</code></a> &mdash; the PIPELINE_STAGE macro list (table numbers + <code>stage-name</code> strings).</li>
+      <li><a href="../ovn/utilities/ovn-sbctl.8.xml"><code>ovn-sbctl.8.xml</code></a> &mdash; <code>lflow-list</code>, <code>--uuid</code>, <code>--ovs</code>, <code>--vflows</code>, <code>count-flows</code>.</li>
+      <li><a href="../ovn/ovn-sb.5"><code>ovn-sb.5</code></a> &mdash; the <code>Logical_Flow</code> table columns.</li>
+      <li><a href="../ovn/utilities/ovn-trace.8.xml"><code>ovn-trace.8.xml</code></a> &mdash; simulate a packet through these flows.</li>
+    </ul>
+    <p class="note">Ask your agent-teacher to take one real <code>lflow-list</code> line and explain every field.</p>
+  </section>
+
+  <p>
+    <a href="0013-port-binding-lab.html">&larr; Lesson 13</a> &middot;
+    <a href="0003-read-a-logical-flow.html">Lesson 3: Read a Logical Flow</a> &middot;
+    <a href="../reference/0003-logical-flow-reading-guide.html">Logical Flow Reading Guide</a> &middot;
+    <a href="0000-ovn-from-scratch.html">Course home</a>
+  </p>
+</main>
+
+<script>
+  document.querySelectorAll('pre[data-copy]').forEach((pre) => {
+    const wrap = document.createElement('div');
+    wrap.className = 'copy-wrap';
+    pre.parentNode.insertBefore(wrap, pre);
+    wrap.appendChild(pre);
+    const button = document.createElement('button');
+    button.className = 'copy-button';
+    button.type = 'button';
+    button.textContent = 'Copy to pastebin';
+    wrap.appendChild(button);
+    button.addEventListener('click', async () => {
+      try {
+        await navigator.clipboard.writeText(pre.textContent.trim());
+        button.textContent = 'Copied';
+        setTimeout(() => { button.textContent = 'Copy to pastebin'; }, 1200);
+      } catch (error) {
+        button.textContent = 'Select manually';
+      }
+    });
+  });
+
+  const themeButton = document.querySelector('[data-theme-toggle]');
+  const updateThemeButton = () => {
+    const isDark = document.documentElement.dataset.theme === 'dark';
+    themeButton.textContent = isDark ? 'Use light mode' : 'Use dark mode';
+    themeButton.setAttribute('aria-pressed', String(isDark));
+  };
+  themeButton.addEventListener('click', () => {
+    const next = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark';
+    document.documentElement.dataset.theme = next;
+    localStorage.setItem('ovn-course-theme', next);
+    updateThemeButton();
+  });
+  updateThemeButton();
+
+  document.querySelectorAll('[data-quiz]').forEach((quiz) => {
+    const result = quiz.querySelector('.result');
+    quiz.querySelectorAll('.question').forEach((question) => {
+      question.querySelectorAll('button').forEach((button) => {
+        button.addEventListener('click', () => {
+          const ok = button.textContent.trim() === question.dataset.answer;
+          question.dataset.state = ok ? 'correct' : 'wrong';
+          result.textContent = ok ? 'Correct. northd compiles, priority decides, l2_lkup delivers.' : 'Not quite. Re-read which actor writes Logical_Flow and how priorities resolve.';
+        });
+      });
+    });
+  });
+</script>
+</body>
+</html>

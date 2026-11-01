@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>OVN Control Plane Map</title>
+  <link rel="stylesheet" href="../assets/course.css">
+</head>
+<body>
+<main>
+  <span class="tag">Reference</span>
+  <h1>OVN Control Plane Map</h1>
+  <p class="subtitle">A compact map for deciding which command to use in the sandbox.</p>
+
+  <section class="grid">
+    <div class="card">
+      <h2>Northbound DB</h2>
+      <p>The intent layer. It stores logical switches, logical routers, ACLs, and other desired logical network configuration.</p>
+      <p><strong>Sandbox command:</strong> <code>ovn-nbctl show</code></p>
+    </div>
+    <div class="card">
+      <h2><code>ovn-northd</code></h2>
+      <p>The compiler. It reads Northbound intent and writes lower-level logical datapath information into the Southbound DB.</p>
+      <p><strong>Look for output with:</strong> <code>ovn-sbctl lflow-list</code></p>
+    </div>
+    <div class="card">
+      <h2>Southbound DB</h2>
+      <p>The distribution layer. It contains logical flows, port bindings, chassis information, and data consumed by controllers.</p>
+      <p><strong>Sandbox command:</strong> <code>ovn-sbctl show</code></p>
+    </div>
+    <div class="card">
+      <h2><code>ovn-controller</code></h2>
+      <p>The local agent. It reads Southbound data and programs Open vSwitch on a chassis.</p>
+      <p><strong>Sandbox commands:</strong> <code>ovs-vsctl show</code>, <code>ovs-ofctl dump-flows br-int</code></p>
+    </div>
+  </section>
+
+  <h2>One Sentence</h2>
+  <p>OVN turns logical intent in the Northbound DB into distributed datapath behavior through <code>ovn-northd</code>, the Southbound DB, and <code>ovn-controller</code>.</p>
+
+  <h2>Primary Sources</h2>
+  <p>Use <a href="../ovn/ovn-architecture.7">local <code>ovn-architecture.7</code></a> and <a href="../ovn/Documentation/tutorials/ovn-sandbox.rst">local sandbox tutorial</a>.</p>
+</main>
+</body>
+</html>
