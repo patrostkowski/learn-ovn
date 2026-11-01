@@ -14,7 +14,7 @@ git clone --recurse-submodules <this-repo-url> learn-ovn
 git submodule update --init ovn
 ```
 
-`sandbox.sh` then fetches the nested `ovn/ovs` submodule and builds both:
+If you forget, `sandbox.sh` fetches `ovn/` for you. It also fetches the nested `ovn/ovs` submodule, checks for build tools, and builds both:
 
 ```sh
 ./sandbox.sh          # build OVS + OVN if needed, then open the sandbox shell

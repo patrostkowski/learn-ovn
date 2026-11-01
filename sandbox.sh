@@ -4,8 +4,10 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 OVN_DIR="${ROOT_DIR}/ovn"
-JOBS="${JOBS:-$(nproc)}"
+OVN_REPO_URL="https://github.com/ovn-org/ovn.git"
+JOBS="${JOBS:-$(nproc 2>/dev/null || getconf _NPROCESSORS_ONLN 2>/dev/null || echo 2)}"
 GIT_DEPTH="${GIT_DEPTH:-1}"
+BUILD_TOOLS=(git make cc autoconf automake libtoolize python3)
 
 usage() {
     cat <<'EOF'
@@ -36,6 +38,43 @@ run() {
     "$@"
 }
 
+require_build_tools() {
+    local missing=()
+    local tool
+    for tool in "${BUILD_TOOLS[@]}"; do
+        command -v "${tool}" >/dev/null 2>&1 || missing+=("${tool}")
+    done
+    if (( ${#missing[@]} > 0 )); then
+        cat >&2 <<EOF
+Missing build tools: ${missing[*]}
+
+Install them first, for example:
+  Fedora/RHEL:   sudo dnf install git make gcc autoconf automake libtool python3 openssl-devel
+  Debian/Ubuntu: sudo apt install git make gcc autoconf automake libtool python3 libssl-dev
+EOF
+        exit 1
+    fi
+}
+
+# Fetches the pinned ovn submodule when the clone was made without --recurse-submodules.
+ensure_ovn_checkout() {
+    if [[ -f "${OVN_DIR}/configure.ac" ]]; then
+        return
+    fi
+
+    if git -C "${ROOT_DIR}" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+        run git -C "${ROOT_DIR}" submodule update --init --depth "${GIT_DEPTH}" ovn
+        return
+    fi
+
+    echo "Not a git checkout, cloning latest OVN from ${OVN_REPO_URL} (not the pinned commit)." >&2
+    if [[ -d "${OVN_DIR}" ]] && ! rmdir "${OVN_DIR}" 2>/dev/null; then
+        echo "${OVN_DIR} exists but is not an OVN checkout, remove it and rerun." >&2
+        exit 1
+    fi
+    run git clone --depth "${GIT_DEPTH}" "${OVN_REPO_URL}" "${OVN_DIR}"
+}
+
 ensure_ovs() {
     cd "${OVN_DIR}"
     run git submodule update --init --depth "${GIT_DEPTH}"
@@ -62,7 +101,8 @@ ensure_ovn() {
 }
 
 setup() {
-    require_ovn_checkout
+    require_build_tools
+    ensure_ovn_checkout
     ensure_ovs
     ensure_ovn
 }
