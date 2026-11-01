@@ -52,7 +52,7 @@ If you forget, `sandbox.sh` fetches `ovn/` for you. It also fetches the nested `
 8. [OVN Table Map](reference/0008-ovn-table-map.md)
 9. [OVS: Bridge, Port, Interface](reference/0009-ovs-bridge-port-interface.md)
 
-Long form: [OVN/OVS Engineering Handbook](handbook.md), with OpenStack ML2/OVN, troubleshooting, interview Q&A, and a glossary.
+Long form: [OVN/OVS Engineering Handbook](handbook.md), with OpenStack ML2/OVN, troubleshooting, and a glossary.
 
 ## Course notes
 
