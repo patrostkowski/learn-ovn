@@ -13,6 +13,18 @@
 - [Local: `tutorial/ovn-setup.sh`](../ovn/tutorial/ovn-setup.sh)
   Use as the smallest reproducible topology: two logical switches connected by one logical router.
 
+## Command Manuals
+
+One manual per surface from Lesson 1. Inside the sandbox shell, `man ovn-nbctl` (and the others) also works, since `ovn-sandbox` sets `MANPATH`.
+
+| Tool | Surface | Online | Local source |
+|---|---|---|---|
+| `ovn-nbctl` | Northbound intent | [ovn-nbctl(8)](https://www.ovn.org/support/dist-docs/ovn-nbctl.8.html) | [`ovn/utilities/ovn-nbctl.8.xml`](../ovn/utilities/ovn-nbctl.8.xml) |
+| `ovn-sbctl` | Southbound compiled state | [ovn-sbctl(8)](https://www.ovn.org/support/dist-docs/ovn-sbctl.8.html) | [`ovn/utilities/ovn-sbctl.8.xml`](../ovn/utilities/ovn-sbctl.8.xml) |
+| `ovs-vsctl` | Local OVS configuration | [ovs-vsctl(8)](https://www.openvswitch.org/support/dist-docs/ovs-vsctl.8.txt) | [`ovn/ovs/utilities/ovs-vsctl.8.in`](../ovn/ovs/utilities/ovs-vsctl.8.in) |
+
+The online pages track the latest release; the local files match the pinned `ovn/` commit you actually run.
+
 ## Wisdom (Communities)
 
 - [OVN project mailing lists](https://www.ovn.org/en/support/)

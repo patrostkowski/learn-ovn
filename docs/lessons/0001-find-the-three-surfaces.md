@@ -104,4 +104,12 @@ Answer from memory before peeking back at the model.
 
 Primary source: [OVN sandbox tutorial](../../ovn/Documentation/tutorials/ovn-sandbox.rst), especially “Running the sandbox” and “Creating OVN Resources.” Keep [the control-plane map](../reference/0001-ovn-control-plane-map.md) open as a reference.
 
+One manual per surface, worth skimming the command list of each:
+
+- Intent: [ovn-nbctl(8)](https://www.ovn.org/support/dist-docs/ovn-nbctl.8.html)
+- Compiled OVN: [ovn-sbctl(8)](https://www.ovn.org/support/dist-docs/ovn-sbctl.8.html)
+- Local OVS: [ovs-vsctl(8)](https://www.openvswitch.org/support/dist-docs/ovs-vsctl.8.txt)
+
+In the sandbox shell, `man ovn-nbctl`, `man ovn-sbctl` and `man ovs-vsctl` show the same pages for your exact build.
+
 If any command output is confusing, ask the agent to explain that exact output. That is the fastest way to connect the model to the real sandbox.
