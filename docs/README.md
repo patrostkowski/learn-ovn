@@ -6,6 +6,16 @@ Start with [MISSION.md](MISSION.md) for the goal, then work through the lessons 
 
 ## Getting started
 
+`ovn/` is a git submodule pinned to an upstream OVN commit, so clone with submodules:
+
+```sh
+git clone --recurse-submodules <this-repo-url> learn-ovn
+# or, in an existing clone
+git submodule update --init ovn
+```
+
+`sandbox.sh` then fetches the nested `ovn/ovs` submodule and builds both:
+
 ```sh
 ./sandbox.sh          # build OVS + OVN if needed, then open the sandbox shell
 ./sandbox.sh cleanup  # stop sandbox daemons and remove ovn/tutorial/sandbox
