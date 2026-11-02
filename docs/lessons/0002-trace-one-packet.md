@@ -43,9 +43,9 @@ In your running sandbox shell, make sure the tutorial topology exists, then trac
 ```sh
 ./ovn-setup.sh
 
-ovn-trace --minimal sw0 'inport == "sw0-port1" \
-&& eth.src == 50:54:00:00:00:01 && ip4.src == 192.168.0.2 \
-&& eth.dst == 00:00:00:00:ff:01 && ip4.dst == 11.0.0.2 \
+ovn-trace --minimal sw0 'inport == "sw0-port1"
+&& eth.src == 50:54:00:00:00:01 && ip4.src == 192.168.0.2
+&& eth.dst == 00:00:00:00:ff:01 && ip4.dst == 11.0.0.2
 && ip.ttl == 64'
 ```
 
