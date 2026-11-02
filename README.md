@@ -9,7 +9,7 @@ Start with [MISSION.md](MISSION.md) for the goal, then work through the lessons 
 `ovn/` is a git submodule pinned to an upstream OVN commit, so clone with submodules:
 
 ```sh
-git clone --recurse-submodules <this-repo-url> learn-ovn
+git clone --recurse-submodules https://github.com/patrostkowski/learn-ovn.git
 # or, in an existing clone
 git submodule update --init ovn
 ```
